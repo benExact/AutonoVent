@@ -1,0 +1,8 @@
+# Autonovent
+# Allow crawling. Do not disallow the production website.
+
+User-agent: *
+Allow: /
+
+# Uncomment and replace PRODUCTION-DOMAIN before launch:
+# Sitemap: https://PRODUCTION-DOMAIN/sitemap.xml

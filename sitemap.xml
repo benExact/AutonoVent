@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Replace PRODUCTION-DOMAIN with the live site origin before launch. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/</loc>
+    <lastmod>2026-10-14</lastmod>
+  </url>
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/product.html</loc>
+    <lastmod>2026-10-14</lastmod>
+  </url>
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/how-it-works.html</loc>
+    <lastmod>2026-10-14</lastmod>
+  </url>
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/installation.html</loc>
+    <lastmod>2026-10-14</lastmod>
+  </url>
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/faq.html</loc>
+    <lastmod>2026-10-14</lastmod>
+  </url>
+</urlset>

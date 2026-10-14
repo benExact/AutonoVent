@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640" role="img" aria-labelledby="placeholderTitle placeholderDesc">
+  <title id="placeholderTitle">Product photograph placeholder</title>
+  <desc id="placeholderDesc">An empty frame. This is not a photograph of an Autonovent unit.</desc>
+  <rect width="800" height="640" fill="#1F2D1F"/>
+  <rect x="28" y="28" width="744" height="584" fill="none" stroke="#A3B18A" stroke-width="2" stroke-dasharray="10 12"/>
+  <text x="400" y="286" fill="#D9C9A9" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="4" text-anchor="middle">PRODUCT PHOTOGRAPH</text>
+  <text x="400" y="338" fill="#F7F8F3" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" text-anchor="middle">Placeholder only</text>
+  <text x="400" y="378" fill="#A3B18A" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" text-anchor="middle">Not an image of Autonovent</text>
+</svg>

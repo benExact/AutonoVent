@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="journeyTitle journeyDesc">
+  <title id="journeyTitle">Illustrated dusty road</title>
+  <desc id="journeyDesc">A drawn landscape of an open dirt road and distant ridges. This is not a photograph and does not show Autonovent.</desc>
+  <rect width="1600" height="900" fill="#0B0B0B"/>
+  <path d="M760 900 C980 760 1120 560 1280 470 C1400 410 1500 390 1600 370 L1600 900 Z" fill="#1F2D1F"/>
+  <path d="M980 900 C1120 780 1240 640 1360 560 C1460 510 1540 490 1600 470 L1600 900 Z" fill="#1F2D1F" opacity="0.8"/>
+  <path d="M1180 900 L1320 620 L1480 900 Z" fill="#D9C9A9"/>
+  <path d="M1280 900 L1380 700 L1460 900 Z" fill="#D9C9A9" opacity="0.7"/>
+  <g fill="#A3B18A" opacity="0.4">
+    <ellipse cx="1360" cy="520" rx="150" ry="22"/>
+    <ellipse cx="1500" cy="470" rx="90" ry="16"/>
+  </g>
+  <g fill="#D9C9A9">
+    <circle cx="1260" cy="760" r="2"/>
+    <circle cx="1340" cy="820" r="1.6"/>
+    <circle cx="1410" cy="740" r="2"/>
+    <circle cx="1480" cy="800" r="1.5"/>
+  </g>
+</svg>
