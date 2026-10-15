@@ -27,14 +27,17 @@ def test_isolated_database_has_migrated_tables(isolated_database_url: str) -> No
         ).scalars().all()
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
     engine.dispose()
-    assert revision == "20261014_0001"
+    assert revision == "20261015_0003"
     assert tables == [
+        "admin_sessions",
         "admin_users",
         "alembic_version",
+        "auth_login_attempts",
         "order_items",
         "order_status_events",
         "orders",
         "payments",
+        "product_audit_events",
         "products",
         "shipments",
     ]
@@ -68,6 +71,7 @@ def test_transaction_commits_and_rolls_back(isolated_database_url: str) -> None:
             text("SELECT count(*) FROM products WHERE slug = 'txn-probe'")
         ).scalar()
         assert stored == 1
+        session.execute(text("DELETE FROM product_audit_events WHERE product_id IN (SELECT id FROM products WHERE slug = 'txn-probe')"))
         session.execute(text("DELETE FROM products WHERE slug = 'txn-probe'"))
         session.commit()
         cleared = session.execute(text("SELECT count(*) FROM products")).scalar()

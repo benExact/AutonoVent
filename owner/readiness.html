@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autonovent | Readiness</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" href="../favicon.ico" sizes="16x16">
+    <link rel="stylesheet" href="../css/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#owner-readiness">Skip to readiness</a>
+    <main class="owner-portal" id="owner-readiness">
+      <header class="owner-portal__bar">
+        <a class="brand" href="../index.html" aria-label="Autonovent">
+          <img class="brand-logo" src="../assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+        </a>
+        <div>
+          <p class="eyebrow">Leave the dust behind.</p>
+          <h1>Readiness</h1>
+        </div>
+        <nav class="owner-portal__nav" aria-label="Owner">
+          <a href="orders.html">Orders</a>
+          <a href="products.html">Products</a>
+          <a href="readiness.html" aria-current="page">Readiness</a>
+          <button class="button button--secondary" type="button" data-auth-logout hidden>Sign out</button>
+        </nav>
+      </header>
+      <p class="form-status" role="status" data-auth-status></p>
+      <p class="lede">Checkout stays off. This list only shows what is still missing. It does not store courier tokens or payment secrets.</p>
+      <p class="form-status" role="status" data-readiness-status>Loading checklist.</p>
+      <ul class="owner-check" data-readiness-list></ul>
+      <button class="button button--secondary" type="button" data-readiness-retry hidden>Try again</button>
+    </main>
+    <script src="../js/config.js"></script>
+    <script src="../js/owner-products.js"></script>
+  </body>
+</html>

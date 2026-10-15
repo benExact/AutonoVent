@@ -11,6 +11,13 @@ from app.db.base import Base
 
 PAYMENT_STATUSES = ("pending", "paid", "failed", "cancelled")
 FULFILMENT_STATUSES = ("unfulfilled", "processing", "shipped", "delivered", "cancelled")
+FULFILMENT_TRANSITIONS = {
+    "unfulfilled": frozenset({"processing", "cancelled"}),
+    "processing": frozenset({"shipped", "cancelled"}),
+    "shipped": frozenset({"delivered"}),
+    "delivered": frozenset(),
+    "cancelled": frozenset(),
+}
 
 
 class Order(Base):
@@ -27,6 +34,10 @@ class Order(Base):
         CheckConstraint(
             "fulfilment_status IN ('unfulfilled', 'processing', 'shipped', 'delivered', 'cancelled')",
             name="ck_orders_fulfilment_status",
+        ),
+        CheckConstraint(
+            "(idempotency_key IS NULL AND idempotency_fingerprint IS NULL) OR (idempotency_key IS NOT NULL AND idempotency_fingerprint IS NOT NULL)",
+            name="ck_orders_idempotency_pair",
         ),
     )
 
@@ -50,6 +61,8 @@ class Order(Base):
     delivery_region: Mapped[str | None] = mapped_column(String(120))
     delivery_postal_code: Mapped[str | None] = mapped_column(String(20))
     delivery_country: Mapped[str | None] = mapped_column(String(2))
+    idempotency_key: Mapped[str | None] = mapped_column(String(80), unique=True)
+    idempotency_fingerprint: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
@@ -94,7 +107,7 @@ class OrderStatusEvent(Base):
     from_status: Mapped[str | None] = mapped_column(String(32))
     to_status: Mapped[str] = mapped_column(String(32), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
-    actor: Mapped[str | None] = mapped_column(String(160))
+    actor: Mapped[str | None] = mapped_column(String(254))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
 
     order: Mapped[Order] = relationship(back_populates="status_events")

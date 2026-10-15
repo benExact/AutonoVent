@@ -23,6 +23,6 @@ def test_readiness_without_database(monkeypatch) -> None:
     get_settings.cache_clear()
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 503
-    assert response.json()["detail"] == "DATABASE_URL is not configured."
+    assert response.json()["detail"] == "The database is not configured."
     reset_engine()
     get_settings.cache_clear()

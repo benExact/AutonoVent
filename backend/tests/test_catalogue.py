@@ -32,6 +32,7 @@ def test_empty_catalogue(monkeypatch, isolated_database_url: str) -> None:
     engine = create_engine(isolated_database_url)
     with engine.begin() as connection:
         connection.execute(text("DELETE FROM order_items"))
+        connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
     engine.dispose()
 
@@ -47,6 +48,7 @@ def test_catalogue_returns_only_priced_active_products(monkeypatch, isolated_dat
     engine = create_engine(isolated_database_url)
     with engine.begin() as connection:
         connection.execute(text("DELETE FROM order_items"))
+        connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
         connection.execute(
             text(
@@ -78,6 +80,7 @@ def test_catalogue_returns_only_priced_active_products(monkeypatch, isolated_dat
 
     engine = create_engine(isolated_database_url)
     with engine.begin() as connection:
+        connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
         remaining = connection.execute(text("SELECT count(*) FROM products")).scalar()
     engine.dispose()
@@ -110,4 +113,4 @@ def test_catalogue_without_database_url(monkeypatch) -> None:
 
 def test_orders_are_not_public() -> None:
     response = client.get("/api/v1/orders")
-    assert response.status_code == 404
+    assert response.status_code == 401

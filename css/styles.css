@@ -852,6 +852,224 @@ a {
   margin-top: var(--space-lg);
 }
 
+.owner-gate {
+  display: grid;
+  min-height: 100vh;
+  padding: var(--space-xl) var(--space-md);
+  place-items: center;
+}
+
+.owner-gate__panel {
+  width: min(100%, 32rem);
+}
+
+.owner-gate .brand {
+  display: inline-block;
+  margin-bottom: var(--space-lg);
+}
+
+.owner-gate h1 {
+  margin-top: var(--space-sm);
+  font-size: clamp(2.4rem, 6vw, 3.5rem);
+}
+
+.owner-gate .lede {
+  margin-top: var(--space-md);
+}
+
+.owner-gate .form-status {
+  margin-top: var(--space-lg);
+}
+
+.owner-gate .enquiry-form,
+.owner-gate [data-auth-logout] {
+  margin-top: var(--space-lg);
+}
+
+.owner-gate [hidden] {
+  display: none !important;
+}
+
+.owner-portal {
+  width: min(100%, var(--container-max));
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-md) var(--space-3xl);
+}
+
+.owner-portal [hidden] {
+  display: none !important;
+}
+
+.owner-portal__bar {
+  display: grid;
+  gap: var(--space-md);
+  align-items: center;
+  margin-bottom: var(--space-xl);
+}
+
+.owner-portal__bar h1 {
+  margin: var(--space-xs) 0 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
+.owner-portal__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.owner-portal__nav a {
+  color: var(--color-sand);
+  font-weight: 700;
+}
+
+.owner-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-sm);
+}
+
+.owner-card {
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.owner-card__value {
+  margin: var(--space-xs) 0 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.owner-table {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}
+
+.owner-row {
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: inherit;
+  text-decoration: none;
+}
+
+.owner-row strong {
+  color: var(--color-offwhite);
+}
+
+.owner-facts {
+  display: grid;
+  gap: var(--space-sm);
+  margin: var(--space-lg) 0 0;
+}
+
+.owner-facts div {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.owner-facts dt {
+  color: var(--color-sand);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.owner-facts dd {
+  margin: 0;
+}
+
+.owner-items,
+.owner-history {
+  margin: var(--space-md) 0 0;
+  padding-left: 1.15rem;
+}
+
+.owner-portal .field select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-charcoal);
+  color: var(--color-offwhite);
+  font: inherit;
+}
+
+.owner-pager {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.owner-pager:empty {
+  display: none;
+}
+
+.owner-check {
+  display: grid;
+  gap: var(--space-sm);
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.owner-check li {
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.owner-check span {
+  color: var(--color-sand);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.owner-check p,
+.field-note {
+  margin: 0;
+  color: var(--color-sage);
+}
+
+.owner-portal .field input[type="checkbox"] {
+  width: 1.1rem;
+  min-height: 0;
+  margin-right: var(--space-xs);
+  accent-color: var(--color-olive);
+}
+
+.owner-portal button.owner-row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (min-width: 48rem) {
+  .owner-portal__bar {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .owner-row {
+    grid-template-columns: 1.2fr 1.4fr 1fr 1fr auto;
+    align-items: center;
+  }
+}
+
 .faq-list {
   display: grid;
   gap: var(--space-sm);

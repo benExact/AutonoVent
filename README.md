@@ -108,8 +108,73 @@ When order creation is implemented, it will follow these rules:
 - Each order item stores the product name, SKU, unit price, quantity, and line total as they were at creation.
 - `payment_status` starts as `pending`. `fulfilment_status` starts as `unfulfilled`.
 - The order, its items, and the opening status events are written in one transaction. An invalid request rolls back and leaves no partial order.
-- The client sends an `Idempotency-Key`. A later migration will add a unique `orders.idempotency_key`. The same key and the same request return the original order reference. The same key with a different request returns 409. A missing key is rejected so a retry cannot create a second order.
+- The client sends an `Idempotency-Key`. Migration `20261014_0002` stores that key and a fingerprint of the request. The same key and the same request return the original order. The same key with a different request does not create a second order. A missing key is rejected.
 - The response contains the order id and order number only. There is no public list or detail endpoint for orders, payments, addresses, or admin users.
+
+## Order management
+
+There is no public order endpoint. `GET /api/v1/orders` and `POST /api/v1/orders` are not registered. Customer details are not returned by the catalogue or health routes.
+
+The internal order service records an order, its item snapshots, and the opening status events in one transaction. Item prices are read from `products.unit_price_cents`. A line is rejected when the product is missing, inactive, or has no price, and that rejection leaves no partial order. Shipping is stored only when the server supplies `shipping_cents`. The service does not default it to zero and does not call Bob Go.
+
+Repeated creation with the same idempotency key and the same request returns the original order. The same key with a different request raises a conflict and does not insert another order. The key and its fingerprint are stored on `orders` by migration `20261014_0002`.
+
+Fulfilment changes append a timestamped `order_status_events` row. The service has no operation that sets `payment_status` to `paid`. Payment status stays `pending` until a verified payment notification, or a later audited administrative process, is approved.
+
+The private order screens are `owner/orders.html` and `owner/order.html`. They call the authenticated order routes below. Public order submission is still closed.
+
+## Owner authentication
+
+Owner sign-in is `POST /api/v1/auth/login`. Logout is `POST /api/v1/auth/logout`. The current owner is `GET /api/v1/auth/me`, which returns only the email and role. There is no registration route.
+
+Passwords are stored with Argon2id through `argon2-cffi`. The session cookie `autonovent_session` is `HttpOnly` and `SameSite=Lax`. PostgreSQL stores only a SHA-256 hash of the session id, plus expiry, last-seen time, and revocation time. A session lasts 12 hours and is dropped after 2 hours without use. Login creates a new session and revokes the previous one.
+
+State-changing authentication requests must send the `X-CSRF-Token` header that matches the `autonovent_csrf` cookie and the hash stored with the session. Login first calls `GET /api/v1/auth/csrf`. Failed passwords and unknown emails return the same message. After 5 failures in 15 minutes, from the same email or source address, login returns 429.
+
+The session cookie is `Secure` only when `APP_ENV=production`. Local HTTP development leaves it unset so the browser will keep the cookie. Do not use that exception on a public HTTPS site.
+
+The static page and the API must use the same host, normally `127.0.0.1`, because the site is `http://127.0.0.1:8765` and the API is `http://127.0.0.1:8001`. CORS allows those origins and sends cookies. Open `http://127.0.0.1:8765/owner/login.html`.
+
+Create the first owner from `backend`, with the virtual environment active. The command prompts for the email and password and does not accept them as arguments. It refuses to run when an owner already exists, and it refuses a database that is not on this machine.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.admin.bootstrap
+```
+
+No default password is stored in the repository.
+
+Signed-in order routes require the owner session. Fulfilment changes also require `X-CSRF-Token`.
+
+- `GET /api/v1/orders/summary` returns counts only.
+- `GET /api/v1/orders` returns a page of orders. `limit` is 1 to 50 and `offset` starts at 0.
+- `GET /api/v1/orders/{id}` returns the customer, delivery address, item snapshots, amounts, payment status, payment reference when one exists, fulfilment status, and status history.
+- `PATCH /api/v1/orders/{id}/fulfilment` accepts `{"status": "processing"}` and the later steps `shipped`, `delivered`, or `cancelled` where that change is allowed. It appends a history row in the same transaction and records the owner email as the actor. It does not change payment status.
+
+There is still no route that marks an order paid. `POST /api/v1/orders` remains closed.
+
+Owner product routes are under `/api/v1/admin`. Listing and the readiness checklist require the owner session. Creating or editing a product also requires `X-CSRF-Token`.
+
+- `GET /api/v1/admin/products` returns every saved product, including inactive products and products with no price.
+- `POST /api/v1/admin/products` and `PATCH /api/v1/admin/products/{id}` save the name, slug, description, optional SKU, price in integer cents, currency `ZAR`, and active flag. An empty price is stored as no price. Negative prices, fractional prices, and other currencies are rejected.
+- The public catalogue is unchanged: only an active product with a price is returned. Changing a product does not change prices already copied onto an order.
+- `GET /api/v1/admin/readiness` reports whether a selling price is saved and states that the collection address, packed parcel size, Bob Go rate test, and payment setup are still missing. It never returns a token. `checkout_enabled` stays false.
+- `GET /api/v1/admin/products/{id}/audit` returns the owner email, time, and previous and new values for product fields. It is not public. Order fulfilment history stays in `order_status_events` and is not reused for products.
+
+Migration `20261015_0003` adds `product_audit_events`. A product save and its audit row commit together. The log stores only product fields: name, slug, description, SKU, price in cents, currency, and active flag.
+
+Open `http://127.0.0.1:8765/owner/products.html` and `http://127.0.0.1:8765/owner/readiness.html` after signing in. No product or price is seeded.
+
+Migration `20261015_0002` widens `order_status_events.actor` from 160 to 254 characters so the owner email fits. It does not insert orders.
+
+After signing in at `http://127.0.0.1:8765/owner/login.html`, the browser opens `http://127.0.0.1:8765/owner/orders.html`. The API stays on `http://127.0.0.1:8001`. Use the same host for both. An empty database shows zero counts and “No orders have been recorded.”
+
+## Bob Go sandbox rates
+
+Rate quotes use Bob Go API v2 sandbox only: `https://api.sandbox.bobgo.co.za/v2`. The official collection authenticates with a bearer token and requests courier rates at `POST /rates`. Production (`https://api.bobgo.co.za/v2`) is rejected. The client does not create shipments.
+
+`POST /rates-at-checkout` is not used. That endpoint requires an item price, and no selling price has been confirmed.
+
+The product’s unit size is 187 × 150 × 41 mm and its unit weight is 2 kg. Those are not confirmed packed parcel measurements, so they are not sent as shipping dimensions. A quote also needs the Rhino Canopies warehouse street address, suburb, province or zone, and postal code. None of those address fields has been supplied. Put the sandbox token in `backend/.env` as `BOBGO_API_TOKEN`. The example file leaves it empty.
 
 ## Public website
 
@@ -120,6 +185,39 @@ python -m http.server 8765 --bind 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8765/`. The product page calls `GET /api/v1/products`. The other pages do not.
+
+## Database backup and restore
+
+Backups are not automated and are not copied off this machine. A dump can contain customer and order details once those exist, so keep it outside the Git repository. The `backups/` directory is ignored. Do not email a dump or commit it. On Windows, limit the folder to your user account.
+
+These commands use the local Docker PostgreSQL service. They do not print the database password. `pg_dump` runs inside the container. Restore only into a new database name. Do not restore over `autonovent`.
+
+From the repository root, create a custom-format dump of the working database:
+
+```powershell
+New-Item -ItemType Directory -Force backups | Out-Null
+docker compose exec -T postgres pg_dump -U autonovent -d autonovent --format=custom --no-owner --no-acl --file=/tmp/autonovent.dump
+docker compose cp postgres:/tmp/autonovent.dump backups/autonovent.dump
+docker compose exec -T postgres rm -f /tmp/autonovent.dump
+```
+
+To rehearse a restore, create an empty database and load the dump there:
+
+```powershell
+docker compose exec -T postgres psql -U autonovent -d postgres -c "CREATE DATABASE autonovent_restore"
+docker compose cp backups/autonovent.dump postgres:/tmp/autonovent-restore.dump
+docker compose exec -T postgres pg_restore -U autonovent -d autonovent_restore --no-owner --no-acl /tmp/autonovent-restore.dump
+docker compose exec -T postgres psql -U autonovent -d autonovent_restore -c "SELECT version_num FROM alembic_version"
+docker compose exec -T postgres rm -f /tmp/autonovent-restore.dump
+```
+
+Compare `version_num` with `alembic current` from `backend`. Check that the restored table list matches the source and that a known synthetic row is present. Drop the rehearsal database when finished:
+
+```powershell
+docker compose exec -T postgres psql -U autonovent -d postgres -c "DROP DATABASE autonovent_restore"
+```
+
+If a connection blocks the drop, disconnect it from `postgres` and run the drop again. Do not run `DROP DATABASE autonovent`.
 
 ## Hosting, when deployment is approved
 
@@ -133,4 +231,4 @@ Nothing in this milestone is deployed.
 
 ## Not in this milestone
 
-PayFast checkout, payment notifications, courier rates, owner login, and admin order screens are intentionally absent.
+Public checkout, payment capture, live courier booking, stock tracking, and production deployment are intentionally absent. Backups are manual and local only.

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autonovent | Orders</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" href="../favicon.ico" sizes="16x16">
+    <link rel="stylesheet" href="../css/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#owner-orders">Skip to orders</a>
+    <main class="owner-portal" id="owner-orders">
+      <header class="owner-portal__bar">
+        <a class="brand" href="../index.html" aria-label="Autonovent">
+          <img class="brand-logo" src="../assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+        </a>
+        <div>
+          <p class="eyebrow">Leave the dust behind.</p>
+          <h1>Orders</h1>
+        </div>
+        <nav class="owner-portal__nav" aria-label="Owner">
+          <a href="orders.html" aria-current="page">Orders</a>
+          <a href="products.html">Products</a>
+          <a href="readiness.html">Readiness</a>
+          <button class="button button--secondary" type="button" data-auth-logout hidden>Sign out</button>
+        </nav>
+      </header>
+      <p class="form-status" role="status" data-auth-status></p>
+      <section aria-label="Overview">
+        <div class="owner-summary" data-summary></div>
+      </section>
+      <section aria-labelledby="order-list-heading">
+        <h2 id="order-list-heading">Order list</h2>
+        <p class="form-status" role="status" data-orders-status>Loading orders.</p>
+        <div data-orders-list></div>
+        <button class="button button--secondary" type="button" data-orders-retry hidden>Try again</button>
+        <nav class="owner-pager" aria-label="Order pages" data-orders-pages></nav>
+      </section>
+    </main>
+    <script src="../js/config.js"></script>
+    <script src="../js/owner-portal.js"></script>
+  </body>
+</html>
