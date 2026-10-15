@@ -12,7 +12,7 @@ AutonoVent is a small local system with a public website and a private owner are
 
 | Part | What it is | Folder |
 | --- | --- | --- |
-| Public website | Pages the customer sees. They are plain HTML, CSS, and JavaScript. There is no shopping cart and no public checkout. | `index.html`, `product.html`, `how-it-works.html`, `installation.html`, `faq.html`, `css\`, `js\` |
+| Public website | Pages the customer sees. They are plain HTML, CSS, and JavaScript. A simulated checkout page is available only when the API is in development simulation mode. | `index.html`, `product.html`, `checkout.html`, `how-it-works.html`, `installation.html`, `faq.html`, `css\`, `js\` |
 | Owner portal | Private pages for the owner: sign-in, orders, products, and a readiness checklist. | `owner\` |
 | Backend | A Python program built with FastAPI. It answers API requests. | `backend\app` |
 | Database | PostgreSQL 16, started by Docker Compose. | `docker-compose.yml` |
@@ -164,12 +164,25 @@ Open `backend\.env` in an editor and check these names. Do not paste the file in
 | `BOBGO_BASE_URL` | Must stay `https://api.sandbox.bobgo.co.za/v2`. |
 | `BOBGO_API_TOKEN` | Empty until you create a sandbox token. Never commit a real token. |
 | `BOBGO_TIMEOUT_SECONDS` | How long a sandbox request may wait. The example value is `20`. |
+| `CHECKOUT_SIMULATION_ENABLED` | `false` unless you are testing the simulated checkout. Must stay false when `APP_ENV` is `production`. |
+| `CHECKOUT_SIMULATION_RATES` | Test delivery amounts in cents, such as `standard:8500,express:14500`. These are not Bob Go prices. |
+| `CHECKOUT_SIMULATION_REGION_EXTRAS` | Optional extra test cents by province name, such as `Western Cape:2000`. |
 
 The shape of `DATABASE_URL`, with the secret left out, is:
 
 ```text
 postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/autonovent
 ```
+
+### Simulated checkout
+
+The customer test journey is off until `backend\.env` contains `APP_ENV=development` and `CHECKOUT_SIMULATION_ENABLED=true`, plus test delivery amounts such as `CHECKOUT_SIMULATION_RATES=standard:8500,express:14500`. Those amounts are for the demonstration. They are not Bob Go prices. Restart the API after changing the file.
+
+The confirmed unit price is R1,500. In the owner product form that is `150000` cents. Checkout will not invent a price when that field is empty.
+
+Open `http://127.0.0.1:8765/product.html`, add the listed product, and continue on `http://127.0.0.1:8765/checkout.html`. The owner order list marks these rows as simulated test orders.
+
+If `APP_ENV=production` and `CHECKOUT_SIMULATION_ENABLED=true` together, the API refuses to start. Keep the flag false for any production configuration. With the flag false, the quote and payment addresses respond with “not available”.
 
 ### 5. Start Docker Desktop
 

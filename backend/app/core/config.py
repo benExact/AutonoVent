@@ -2,8 +2,10 @@
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.shipping.simulated import SimulatedConfigurationError, parse_region_extras, parse_simulation_rates
 
 
 class Settings(BaseSettings):
@@ -19,6 +21,9 @@ class Settings(BaseSettings):
     auth_session_idle_seconds: int = 7200
     auth_login_max_failures: int = 5
     auth_login_window_seconds: int = 900
+    checkout_simulation_enabled: bool = False
+    checkout_simulation_rates: str = ""
+    checkout_simulation_region_extras: str = ""
 
     @field_validator("cors_origins")
     @classmethod
@@ -60,9 +65,35 @@ class Settings(BaseSettings):
     def origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
+    @model_validator(mode="after")
+    def simulation_is_development_only(self) -> "Settings":
+        env = self.app_env.strip().lower()
+        if not env:
+            raise ValueError("APP_ENV is not configured.")
+        if env not in {"development", "production"}:
+            raise ValueError("APP_ENV must be development or production.")
+        self.app_env = env
+        if env == "production" and self.checkout_simulation_enabled:
+            raise ValueError("Checkout simulation cannot be enabled when APP_ENV is production.")
+        if self.checkout_simulation_enabled and env != "development":
+            raise ValueError("Checkout simulation can only be enabled when APP_ENV is development.")
+        if self.checkout_simulation_enabled:
+            try:
+                rates = parse_simulation_rates(self.checkout_simulation_rates)
+                parse_region_extras(self.checkout_simulation_region_extras)
+            except SimulatedConfigurationError as exc:
+                raise ValueError(str(exc)) from None
+            if not rates:
+                raise ValueError("Simulated delivery rates are not configured.")
+        return self
+
     @property
     def cookie_secure(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def checkout_simulation_active(self) -> bool:
+        return self.app_env == "development" and self.checkout_simulation_enabled
 
 
 @lru_cache

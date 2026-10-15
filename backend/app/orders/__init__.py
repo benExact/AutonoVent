@@ -1,1 +1,1 @@
-"""Order recording. Public checkout is not available."""
+"""Order recording. Public checkout is limited to development simulation."""

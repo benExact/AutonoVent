@@ -19,12 +19,14 @@ class Payment(Base):
             name="ck_payments_status",
         ),
         UniqueConstraint("provider", "provider_reference", name="uq_payments_provider_reference"),
+        UniqueConstraint("idempotency_key", name="uq_payments_idempotency_key"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     provider_reference: Mapped[str | None] = mapped_column(String(128))
+    idempotency_key: Mapped[str | None] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)

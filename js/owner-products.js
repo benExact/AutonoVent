@@ -279,7 +279,11 @@
       return;
     }
     host.replaceChildren();
-    setStatus(status, report.checkout_enabled ? "" : "Checkout is not enabled.");
+    if (report.checkout_simulation_enabled) {
+      setStatus(status, "Simulated checkout is enabled on this development server. Orders placed there are test data. Real checkout is not enabled.");
+    } else {
+      setStatus(status, report.checkout_enabled ? "" : "Checkout is not enabled.");
+    }
     report.items.forEach((item) => {
       const row = document.createElement("li");
       const name = document.createElement("strong");

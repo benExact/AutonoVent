@@ -197,6 +197,7 @@ def test_login_rate_limit(monkeypatch, isolated_database_url: str) -> None:
 def test_secure_cookie_in_production(monkeypatch, isolated_database_url: str) -> None:
     _use_database(monkeypatch, isolated_database_url)
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
     get_settings.cache_clear()
     engine = create_engine(isolated_database_url)
     with Session(engine, expire_on_commit=False) as session:

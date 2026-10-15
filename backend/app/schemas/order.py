@@ -32,6 +32,7 @@ class OrderListItem(BaseModel):
     payment_status: str
     currency: str
     total_cents: int
+    is_simulation: bool
 
 
 class OrderListResponse(BaseModel):
@@ -53,6 +54,10 @@ class OrderDetail(OrderListItem):
     delivery_postal_code: str | None
     delivery_country: str | None
     payment_reference: str | None
+    payment_provider: str | None
+    shipping_provider: str | None
+    shipping_service_code: str | None
+    shipping_quote_reference: str | None
     items: list[OrderItemView]
     status_events: list[StatusEventView]
     allowed_fulfilment_statuses: list[str]

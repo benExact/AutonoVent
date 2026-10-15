@@ -51,6 +51,7 @@
       priceLine.className = "catalogue-price";
       priceLine.textContent = price;
       item.append(name, priceLine);
+      item.dataset.productId = product.id;
 
       if (typeof product.description === "string" && product.description.trim()) {
         const description = document.createElement("p");
@@ -81,6 +82,36 @@
     status.hidden = true;
     retry.hidden = true;
     list.replaceChildren(catalogue);
+    loadSimulation(catalogue);
+  }
+
+  function loadSimulation(catalogue) {
+    if (typeof baseUrl !== "string" || !baseUrl.trim() || !window.AutonoventCart) {
+      return;
+    }
+    fetch(baseUrl.replace(/\/$/, "") + "/api/v1/checkout/status", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!body || body.simulation_enabled !== true) {
+          return;
+        }
+        const note = document.createElement("p");
+        note.className = "notice";
+        note.textContent = "Simulated checkout is enabled. Delivery quotes and payments are test data, not Bob Go or PayFast.";
+        catalogue.before(note);
+        catalogue.querySelectorAll("li[data-product-id]").forEach((item) => {
+          const button = document.createElement("button");
+          button.className = "button button--primary";
+          button.type = "button";
+          button.textContent = "Add to simulated checkout";
+          button.addEventListener("click", () => {
+            window.AutonoventCart.add(item.dataset.productId);
+            window.location.assign("checkout.html");
+          });
+          item.append(button);
+        });
+      })
+      .catch(() => {});
   }
 
   function loadCatalogue() {

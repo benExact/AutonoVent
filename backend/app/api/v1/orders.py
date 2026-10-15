@@ -15,7 +15,7 @@ from app.orders.service import (
     OrderValidationError,
     allowed_fulfilment_statuses,
     get_order,
-    latest_payment_reference,
+    latest_payment_identity,
     list_orders,
     order_summary,
     update_fulfilment_status,
@@ -45,12 +45,14 @@ def _list_item(order: Order) -> OrderListItem:
         payment_status=order.payment_status,
         currency=order.currency,
         total_cents=order.total_cents,
+        is_simulation=order.is_simulation,
     )
 
 
 def _detail(session: Session, order: Order) -> OrderDetail:
     events = sorted(order.status_events, key=lambda event: (event.created_at, str(event.id)))
     items = sorted(order.items, key=lambda item: (item.product_name, str(item.id)))
+    provider, reference = latest_payment_identity(session, order.id)
     return OrderDetail(
         **_list_item(order).model_dump(),
         customer_phone=order.customer_phone,
@@ -63,7 +65,11 @@ def _detail(session: Session, order: Order) -> OrderDetail:
         delivery_region=order.delivery_region,
         delivery_postal_code=order.delivery_postal_code,
         delivery_country=order.delivery_country,
-        payment_reference=latest_payment_reference(session, order.id),
+        payment_reference=reference,
+        payment_provider=provider,
+        shipping_provider=order.shipping_provider,
+        shipping_service_code=order.shipping_service_code,
+        shipping_quote_reference=order.shipping_quote_reference,
         items=[
             OrderItemView(
                 product_name=item.product_name,

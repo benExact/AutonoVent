@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +39,10 @@ class Order(Base):
             "(idempotency_key IS NULL AND idempotency_fingerprint IS NULL) OR (idempotency_key IS NOT NULL AND idempotency_fingerprint IS NOT NULL)",
             name="ck_orders_idempotency_pair",
         ),
+        CheckConstraint(
+            "(is_simulation = false AND shipping_provider IS NULL AND shipping_service_code IS NULL AND shipping_quote_reference IS NULL) OR (is_simulation = true AND shipping_provider = 'simulated-courier' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL)",
+            name="ck_orders_simulation_quote",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -63,6 +67,10 @@ class Order(Base):
     delivery_country: Mapped[str | None] = mapped_column(String(2))
     idempotency_key: Mapped[str | None] = mapped_column(String(80), unique=True)
     idempotency_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    is_simulation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    shipping_provider: Mapped[str | None] = mapped_column(String(32))
+    shipping_service_code: Mapped[str | None] = mapped_column(String(32))
+    shipping_quote_reference: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

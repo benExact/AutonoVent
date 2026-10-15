@@ -52,6 +52,10 @@ class OrderDraft:
     lines: list[OrderLine]
     shipping_cents: int
     customer_phone: str | None = None
+    is_simulation: bool = False
+    shipping_provider: str | None = None
+    shipping_service_code: str | None = None
+    shipping_quote_reference: str | None = None
 
 
 def create_order(session: Session, draft: OrderDraft) -> Order:
@@ -171,16 +175,23 @@ def order_summary(session: Session) -> tuple[int, dict[str, int], dict[str, int]
 
 
 def latest_payment_reference(session: Session, order_id: uuid.UUID) -> str | None:
-    reference = session.scalar(
-        select(Payment.provider_reference)
+    provider, reference = latest_payment_identity(session, order_id)
+    del provider
+    return reference
+
+
+def latest_payment_identity(session: Session, order_id: uuid.UUID) -> tuple[str | None, str | None]:
+    payment = session.scalar(
+        select(Payment)
         .where(Payment.order_id == order_id)
-        .order_by(Payment.created_at.desc())
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
         .limit(1)
     )
-    if reference is None:
-        return None
-    cleaned = reference.strip()
-    return cleaned or None
+    if payment is None:
+        return None, None
+    provider = payment.provider.strip() or None
+    reference = (payment.provider_reference or "").strip() or None
+    return provider, reference
 
 
 def _begin(session: Session):
@@ -211,11 +222,13 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
     items: list[OrderItem] = []
     subtotal = 0
     for line in draft.lines:
-        if not isinstance(line.quantity, int) or isinstance(line.quantity, bool) or line.quantity <= 0:
+        if not isinstance(line.quantity, int) or isinstance(line.quantity, bool) or line.quantity <= 0 or line.quantity > 20:
             raise OrderValidationError("Quantity must be a positive integer.")
         product = session.get(Product, line.product_id)
         if product is None or not product.active or product.unit_price_cents is None:
             raise OrderValidationError("An item is not available at a confirmed price.")
+        if product.unit_price_cents > 2_000_000_000 // line.quantity:
+            raise OrderValidationError("The line total is too large.")
         line_total = line.quantity * product.unit_price_cents
         subtotal += line_total
         items.append(
@@ -229,6 +242,7 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
             )
         )
 
+    provider, service_code, quote_reference = _simulation_quote(draft)
     order = Order(
         order_number=f"AV-{uuid.uuid4().hex[:10].upper()}",
         customer_name=draft.customer_name.strip(),
@@ -249,6 +263,10 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
         delivery_country="ZA",
         idempotency_key=key,
         idempotency_fingerprint=fingerprint,
+        is_simulation=draft.is_simulation,
+        shipping_provider=provider,
+        shipping_service_code=service_code,
+        shipping_quote_reference=quote_reference,
         items=items,
         status_events=[
             OrderStatusEvent(field_name="payment_status", from_status=None, to_status="pending", actor="system"),
@@ -283,14 +301,31 @@ def _fingerprint(draft: OrderDraft) -> str:
         "delivery_name": draft.delivery.name.strip(),
         "delivery_postal_code": draft.delivery.postal_code.strip(),
         "delivery_region": draft.delivery.region.strip(),
+        "is_simulation": draft.is_simulation,
         "lines": sorted(
             ({"product_id": str(line.product_id), "quantity": line.quantity} for line in draft.lines),
             key=lambda item: item["product_id"],
         ),
         "shipping_cents": draft.shipping_cents,
+        "shipping_provider": draft.shipping_provider,
+        "shipping_quote_reference": draft.shipping_quote_reference,
+        "shipping_service_code": draft.shipping_service_code,
     }
     encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _simulation_quote(draft: OrderDraft) -> tuple[str | None, str | None, str | None]:
+    provider = draft.shipping_provider.strip() if draft.shipping_provider else None
+    service_code = draft.shipping_service_code.strip() if draft.shipping_service_code else None
+    reference = draft.shipping_quote_reference.strip() if draft.shipping_quote_reference else None
+    if draft.is_simulation:
+        if provider != "simulated-courier" or not service_code or not reference:
+            raise OrderValidationError("A simulated order needs its simulated delivery quote.")
+        return provider, service_code, reference
+    if provider or service_code or reference:
+        raise OrderValidationError("A delivery quote can only be stored on a simulated order.")
+    return None, None, None
 
 
 def _require_text(value: str, label: str) -> str:

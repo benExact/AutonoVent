@@ -148,7 +148,7 @@
       link.className = "owner-row";
       link.href = "order.html?id=" + encodeURIComponent(order.id);
       const reference = document.createElement("strong");
-      reference.textContent = order.order_number;
+      reference.textContent = order.is_simulation ? order.order_number + " · Simulated test order" : order.order_number;
       const customer = document.createElement("span");
       customer.textContent = order.customer_name;
       const fulfilment = document.createElement("span");
@@ -209,6 +209,25 @@
     });
   }
 
+  function deliveryText(order) {
+    const amount = money(order.shipping_cents, order.currency);
+    if (order.shipping_provider === "simulated-courier") {
+      return amount + " · Simulated courier. This is not a Bob Go price. " + (order.shipping_service_code || "") + " " + (order.shipping_quote_reference || "");
+    }
+    return amount;
+  }
+
+  function paymentText(order) {
+    const status = label(order.payment_status);
+    if (order.is_simulation || order.payment_provider === "simulated") {
+      return status + " · Simulated payment. This is not a PayFast payment.";
+    }
+    if (order.payment_provider) {
+      return status + " · " + order.payment_provider;
+    }
+    return status;
+  }
+
   function field(title, value) {
     const row = document.createElement("div");
     const name = document.createElement("dt");
@@ -226,7 +245,7 @@
     if (!host || !heading || !status) {
       return;
     }
-    heading.textContent = order.order_number;
+    heading.textContent = order.is_simulation ? order.order_number + " · Simulated test order" : order.order_number;
     document.title = "Autonovent | " + order.order_number;
     setStatus(status, "");
     host.replaceChildren();
@@ -243,9 +262,9 @@
       ["Phone", textOrMissing(order.customer_phone)],
       ["Delivery", address || "Not recorded"],
       ["Subtotal", money(order.subtotal_cents, order.currency)],
-      ["Shipping", money(order.shipping_cents, order.currency)],
+      ["Delivery", deliveryText(order)],
       ["Total", money(order.total_cents, order.currency)],
-      ["Payment", label(order.payment_status)],
+      ["Payment", paymentText(order)],
       ["Payment reference", textOrMissing(order.payment_reference)],
       ["Fulfilment", label(order.fulfilment_status)],
     ].forEach((pair) => facts.append(field(pair[0], pair[1])));

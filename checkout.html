@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autonovent | Simulated checkout</title>
+    <meta name="description" content="Simulated Autonovent checkout for local testing. Delivery quotes and payments are test data.">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#0B0B0B">
+    <link rel="icon" href="favicon.ico" sizes="16x16">
+    <link rel="stylesheet" href="css/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="container site-header__bar">
+        <a class="brand" href="index.html" aria-label="Autonovent">
+          <img class="brand-logo" src="assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+        </a>
+        <nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary">
+          <ul class="nav-list">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="product.html">Product</a></li>
+            <li><a href="how-it-works.html">How It Works</a></li>
+            <li><a href="installation.html">Installation</a></li>
+            <li><a href="faq.html">FAQs</a></li>
+          </ul>
+          <a class="button button--primary nav-quote" href="index.html#enquiry">Request a Quote</a>
+        </nav>
+        <div class="site-header__tools">
+          <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+            <span class="nav-toggle__icon" aria-hidden="true">
+              <span class="nav-toggle__bar"></span>
+              <span class="nav-toggle__bar"></span>
+              <span class="nav-toggle__bar"></span>
+            </span>
+            <span class="visually-hidden" data-nav-label>Open menu</span>
+          </button>
+        </div>
+      </div>
+    </header>
+    <main class="site-main" id="main">
+      <section class="product-section" aria-labelledby="checkout-heading">
+        <div class="container">
+          <p class="eyebrow">Leave the dust behind.</p>
+          <h1 id="checkout-heading" class="section-heading">Simulated checkout</h1>
+          <p class="notice" data-checkout-banner>Simulated test checkout. Delivery quotes are not Bob Go prices. Payments are not PayFast payments. No card details are collected.</p>
+          <p class="lede" data-checkout-status role="status">Loading simulated checkout.</p>
+          <div data-checkout-cart></div>
+          <form class="enquiry-form" data-checkout-form hidden>
+            <div class="field">
+              <label for="customer-name">Your name</label>
+              <input id="customer-name" name="customer_name" autocomplete="name" required maxlength="160">
+            </div>
+            <div class="field">
+              <label for="customer-email">Email</label>
+              <input id="customer-email" name="customer_email" type="email" autocomplete="email" required maxlength="254">
+            </div>
+            <div class="field">
+              <label for="customer-phone">Phone</label>
+              <input id="customer-phone" name="customer_phone" type="tel" autocomplete="tel" maxlength="40">
+            </div>
+            <div class="field">
+              <label for="delivery-name">Delivery name</label>
+              <input id="delivery-name" name="delivery_name" autocomplete="name" required maxlength="160">
+            </div>
+            <div class="field">
+              <label for="delivery-line1">Street address</label>
+              <input id="delivery-line1" name="line1" autocomplete="address-line1" required maxlength="200">
+            </div>
+            <div class="field">
+              <label for="delivery-line2">Address line 2</label>
+              <input id="delivery-line2" name="line2" autocomplete="address-line2" maxlength="200">
+            </div>
+            <div class="field">
+              <label for="delivery-city">City</label>
+              <input id="delivery-city" name="city" autocomplete="address-level2" required maxlength="120">
+            </div>
+            <div class="field">
+              <label for="delivery-region">Province</label>
+              <select id="delivery-region" name="region" required>
+                <option value="">Select a province</option>
+                <option>Eastern Cape</option>
+                <option>Free State</option>
+                <option>Gauteng</option>
+                <option>KwaZulu-Natal</option>
+                <option>Limpopo</option>
+                <option>Mpumalanga</option>
+                <option>Northern Cape</option>
+                <option>North West</option>
+                <option>Western Cape</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="delivery-postal">Postal code</label>
+              <input id="delivery-postal" name="postal_code" inputmode="numeric" autocomplete="postal-code" required maxlength="4" pattern="[0-9]{4}">
+            </div>
+            <button class="button button--secondary" type="button" data-quote-button>Get simulated delivery quotes</button>
+            <div data-quote-options></div>
+            <button class="button button--primary" type="submit" data-place-order>Place simulated order</button>
+          </form>
+          <div data-checkout-payment></div>
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a class="brand brand--footer" href="index.html" aria-label="Autonovent">
+            <img class="brand-logo" src="assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+          </a>
+          <p class="footer-tagline">Leave the dust behind.</p>
+        </div>
+        <nav aria-label="Footer">
+          <p class="footer-heading">Explore</p>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="product.html">Product</a></li>
+            <li><a href="how-it-works.html">How It Works</a></li>
+            <li><a href="installation.html">Installation</a></li>
+            <li><a href="faq.html">FAQs</a></li>
+          </ul>
+        </nav>
+        <div>
+          <p class="footer-heading">Enquire</p>
+          <ul class="footer-links">
+            <li><a href="index.html#enquiry">Request a Quote</a></li>
+          </ul>
+          <p class="placeholder-note">Contact details have not been published yet.</p>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <p>&copy; <span data-copyright-year>2026</span> Autonovent</p>
+      </div>
+    </footer>
+    <script src="js/config.js"></script>
+    <script src="js/main.js" defer></script>
+    <script src="js/cart.js" defer></script>
+    <script src="js/checkout.js" defer></script>
+  </body>
+</html>

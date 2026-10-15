@@ -135,6 +135,7 @@ def readiness(
     courier += " No successful sandbox rate test has been recorded."
     return ReadinessReport(
         checkout_enabled=False,
+        checkout_simulation_enabled=get_settings().checkout_simulation_active,
         items=[
             ReadinessItem(key="selling_price", label="Confirmed selling price", ready=price_ready, detail=price_detail),
             ReadinessItem(

@@ -229,6 +229,16 @@ Nothing in this milestone is deployed.
 - Set `CORS_ORIGINS` to the real website origin. Wildcard CORS is rejected.
 - Accounts that will be needed later, and are not created here: the static host, the API host, a PostgreSQL service, a domain and certificate, a PayFast merchant account, and Bob Go API access.
 
+## Simulated checkout
+
+Local development can exercise a full test purchase without PayFast or Bob Go. It stays off unless `APP_ENV=development` and `CHECKOUT_SIMULATION_ENABLED=true`. If `APP_ENV=production` and the flag is true, the API refuses to start. Quote, order, and payment routes then respond `404`.
+
+Test delivery amounts belong in `CHECKOUT_SIMULATION_RATES` as `code:cents` pairs, for example `standard:8500,express:14500`. Optional province extras use the province name, for example `Western Cape:2000`. These figures are test configuration. They are not courier prices. The selected amount, provider `simulated-courier`, and quote reference are stored on the order.
+
+The confirmed unit price is R1,500, stored as `150000` cents. Checkout reads `products.unit_price_cents` and ignores prices sent by the browser. A failed or cancelled simulated payment leaves the order unpaid. A successful one stores provider `simulated` and a `sim-` reference. It is not a PayFast payment. No card number is collected.
+
+The product page shows “Add to simulated checkout” only while simulation is enabled. The test page is `checkout.html`. Owner orders from this flow are marked “Simulated test order”. `checkout_enabled` on the readiness report stays false.
+
 ## Not in this milestone
 
-Public checkout, payment capture, live courier booking, stock tracking, and production deployment are intentionally absent. Backups are manual and local only.
+PayFast, live courier booking, stock tracking, and production deployment are intentionally absent. Backups are manual and local only.

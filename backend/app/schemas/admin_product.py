@@ -148,4 +148,5 @@ class ReadinessItem(BaseModel):
 
 class ReadinessReport(BaseModel):
     checkout_enabled: bool
+    checkout_simulation_enabled: bool
     items: list[ReadinessItem]
