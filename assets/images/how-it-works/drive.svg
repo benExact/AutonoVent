@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 440" width="720" height="440">
+  <title>Drive. Vent open. Air flows into the canopy.</title>
+  <rect width="720" height="440" fill="#0B0B0B"/>
+  <text x="32" y="46" fill="#A3B18A" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="2">01</text>
+  <text x="70" y="48" fill="#F7F8F3" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="700">Drive</text>
+  <text x="32" y="412" fill="#D9C9A9" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16">Vent open. Air flows into the canopy.</text>
+  <g transform="translate(40,86)">
+    
+    <g fill="none">
+      <ellipse cx="320" cy="228" rx="260" ry="9" fill="#1F2D1F"/>
+      <path d="M268 78 H572 V208 H286 V126 H268 Z" fill="#F7F8F3"/>
+      <path d="M318 112 H544 V176 H318 Z" fill="#1F2D1F"/>
+      <path d="M430 112 V176" stroke="#A3B18A" stroke-width="1.4" opacity="0.55"/>
+      <path d="M36 208 V162 C36 162 78 146 128 140 L164 108 H236 L252 150 V208 Z" fill="#F7F8F3"/>
+      <path d="M176 118 H226 V148 H184 Z" fill="#1F2D1F"/>
+      <path d="M572 162 H586 V186 H572 Z" fill="#D9C9A9"/>
+      
+        <path d="M286 78 L286 62 L302 56 L378 60 L378 78 Z" fill="#141414" stroke="#A3B18A" stroke-width="1.6"/>
+        <path d="M284 64 H302 V78 H284 Z" fill="#0B0B0B" stroke="#D9C9A9" stroke-width="1.4"/>
+        <path d="M286 62 L266 46" stroke="#D9C9A9" stroke-width="2.4" stroke-linecap="round"/>
+        <rect x="332" y="50" width="34" height="8" fill="#566B2F" stroke="#D9C9A9" stroke-width="0.8"/>
+        <path d="M349 50 V58" stroke="#0B0B0B" stroke-width="0.8" opacity="0.45"/>
+        
+      <circle cx="118" cy="208" r="30" fill="#0B0B0B" stroke="#A3B18A" stroke-width="3"/>
+      <circle cx="118" cy="208" r="11" fill="#566B2F"/>
+      <circle cx="486" cy="208" r="30" fill="#0B0B0B" stroke="#A3B18A" stroke-width="3"/>
+      <circle cx="486" cy="208" r="11" fill="#566B2F"/>
+    </g>
+    
+    <path d="M150 46 C196 34 246 52 286 68" stroke="#A3B18A" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <path d="M318 136 C390 164 470 160 540 140" stroke="#A3B18A" stroke-width="2.2" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <circle cx="604" cy="124" r="3.2" fill="#D9C9A9"/>
+    <circle cx="624" cy="148" r="2.3" fill="#D9C9A9" opacity="0.8"/>
+    <circle cx="610" cy="170" r="2.6" fill="#D9C9A9" opacity="0.7"/>
+    <text x="132" y="34" fill="#A3B18A" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700">Air in</text>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 1.2 L8.5 5 L0 8.8 Z" fill="#A3B18A"/>
+      </marker>
+    </defs>
+
+  </g>
+</svg>
