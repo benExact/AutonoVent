@@ -10,10 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 PAYMENT_STATUSES = ("pending", "paid", "failed", "cancelled")
-FULFILMENT_STATUSES = ("unfulfilled", "processing", "shipped", "delivered", "cancelled")
+FULFILMENT_STATUSES = ("unfulfilled", "processing", "packed", "shipped", "delivered", "cancelled")
 FULFILMENT_TRANSITIONS = {
     "unfulfilled": frozenset({"processing", "cancelled"}),
-    "processing": frozenset({"shipped", "cancelled"}),
+    "processing": frozenset({"packed", "cancelled"}),
+    "packed": frozenset({"shipped", "cancelled"}),
     "shipped": frozenset({"delivered"}),
     "delivered": frozenset(),
     "cancelled": frozenset(),
@@ -32,7 +33,7 @@ class Order(Base):
             name="ck_orders_payment_status",
         ),
         CheckConstraint(
-            "fulfilment_status IN ('unfulfilled', 'processing', 'shipped', 'delivered', 'cancelled')",
+            "fulfilment_status IN ('unfulfilled', 'processing', 'packed', 'shipped', 'delivered', 'cancelled')",
             name="ck_orders_fulfilment_status",
         ),
         CheckConstraint(
@@ -40,8 +41,12 @@ class Order(Base):
             name="ck_orders_idempotency_pair",
         ),
         CheckConstraint(
-            "(is_simulation = false AND shipping_provider IS NULL AND shipping_service_code IS NULL AND shipping_quote_reference IS NULL) OR (is_simulation = true AND shipping_provider = 'simulated-courier' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL)",
+            "(is_simulation = false AND shipping_provider IS NULL AND shipping_service_code IS NULL AND shipping_quote_reference IS NULL) OR (is_simulation = true AND shipping_provider = 'simulated-courier' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = false AND shipping_provider = 'bobgo' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = false AND shipping_provider = 'shiplogic' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL)",
             name="ck_orders_simulation_quote",
+        ),
+        CheckConstraint(
+            "(terms_accepted IS NULL AND terms_accepted_at IS NULL AND terms_version IS NULL) OR (terms_accepted = true AND terms_accepted_at IS NOT NULL AND terms_version IS NOT NULL)",
+            name="ck_orders_terms_acceptance",
         ),
     )
 
@@ -61,6 +66,7 @@ class Order(Base):
     delivery_name: Mapped[str | None] = mapped_column(String(160))
     delivery_line1: Mapped[str | None] = mapped_column(String(200))
     delivery_line2: Mapped[str | None] = mapped_column(String(200))
+    delivery_suburb: Mapped[str | None] = mapped_column(String(120))
     delivery_city: Mapped[str | None] = mapped_column(String(120))
     delivery_region: Mapped[str | None] = mapped_column(String(120))
     delivery_postal_code: Mapped[str | None] = mapped_column(String(20))
@@ -69,8 +75,11 @@ class Order(Base):
     idempotency_fingerprint: Mapped[str | None] = mapped_column(String(64))
     is_simulation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     shipping_provider: Mapped[str | None] = mapped_column(String(32))
-    shipping_service_code: Mapped[str | None] = mapped_column(String(32))
-    shipping_quote_reference: Mapped[str | None] = mapped_column(String(80))
+    shipping_service_code: Mapped[str | None] = mapped_column(String(80))
+    shipping_quote_reference: Mapped[str | None] = mapped_column(String(120))
+    terms_accepted: Mapped[bool | None] = mapped_column(Boolean)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms_version: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
@@ -96,6 +105,7 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     line_total_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     order: Mapped[Order] = relationship(back_populates="items")
 

@@ -4,12 +4,15 @@ import hashlib
 import json
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import get_settings
 from app.models.order import FULFILMENT_STATUSES, FULFILMENT_TRANSITIONS, PAYMENT_STATUSES, Order, OrderItem, OrderStatusEvent
+from app.notifications.service import queue_fulfilment_update, release_notifications
 from app.models.payment import Payment
 from app.models.product import Product
 
@@ -30,6 +33,7 @@ class IdempotencyConflict(OrderError):
 class OrderLine:
     product_id: uuid.UUID
     quantity: int
+    unit_price_cents: int | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,7 @@ class DeliveryAddress:
     region: str
     postal_code: str
     line2: str | None = None
+    suburb: str = ""
     country: str = "ZA"
 
 
@@ -56,6 +61,8 @@ class OrderDraft:
     shipping_provider: str | None = None
     shipping_service_code: str | None = None
     shipping_quote_reference: str | None = None
+    terms_version: str | None = None
+    allow_demo_price: bool = False
 
 
 def create_order(session: Session, draft: OrderDraft) -> Order:
@@ -89,7 +96,7 @@ def create_order(session: Session, draft: OrderDraft) -> Order:
 
 def allowed_fulfilment_statuses(current: str) -> list[str]:
     allowed = FULFILMENT_TRANSITIONS.get(current, frozenset())
-    return [status for status in ("processing", "shipped", "delivered", "cancelled") if status in allowed]
+    return [status for status in ("processing", "packed", "shipped", "delivered", "cancelled") if status in allowed]
 
 
 def update_fulfilment_status(session: Session, order_id: uuid.UUID, status: str, actor: str) -> Order:
@@ -110,20 +117,22 @@ def update_fulfilment_status(session: Session, order_id: uuid.UUID, status: str,
             raise OrderValidationError("That fulfilment change is not allowed.")
         previous = order.fulfilment_status
         order.fulfilment_status = status
-        session.add(
-            OrderStatusEvent(
-                order_id=order.id,
-                field_name="fulfilment_status",
-                from_status=previous,
-                to_status=status,
-                actor=cleaned_actor,
-            )
+        event = OrderStatusEvent(
+            order_id=order.id,
+            field_name="fulfilment_status",
+            from_status=previous,
+            to_status=status,
+            actor=cleaned_actor,
         )
+        session.add(event)
+        session.flush()
+        queue_fulfilment_update(session, order, event, get_settings())
     stored = session.get(Order, order_id)
     if stored is None:
         raise OrderValidationError("The order does not exist.")
     if session.in_transaction():
         session.commit()
+    release_notifications(session)
     return stored
 
 
@@ -218,6 +227,8 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
         ("delivery postal code", delivery.postal_code),
     ):
         _require_text(value, field_name)
+    if draft.is_simulation or (draft.shipping_provider or "").strip() in {"bobgo", "shiplogic"}:
+        _require_text(delivery.suburb, "suburb")
 
     items: list[OrderItem] = []
     subtotal = 0
@@ -225,11 +236,19 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
         if not isinstance(line.quantity, int) or isinstance(line.quantity, bool) or line.quantity <= 0 or line.quantity > 20:
             raise OrderValidationError("Quantity must be a positive integer.")
         product = session.get(Product, line.product_id)
-        if product is None or not product.active or product.unit_price_cents is None:
+        if product is None or not product.active:
             raise OrderValidationError("An item is not available at a confirmed price.")
-        if product.unit_price_cents > 2_000_000_000 // line.quantity:
+        if product.unit_price_cents is not None:
+            unit_price = product.unit_price_cents
+            price_is_demo = False
+        elif (draft.is_simulation or draft.allow_demo_price) and isinstance(line.unit_price_cents, int) and not isinstance(line.unit_price_cents, bool):
+            unit_price = line.unit_price_cents
+            price_is_demo = True
+        else:
+            raise OrderValidationError("An item is not available at a confirmed price.")
+        if unit_price < 0 or unit_price > 2_000_000_000 // line.quantity:
             raise OrderValidationError("The line total is too large.")
-        line_total = line.quantity * product.unit_price_cents
+        line_total = line.quantity * unit_price
         subtotal += line_total
         items.append(
             OrderItem(
@@ -237,12 +256,13 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
                 product_name=product.name,
                 sku=product.sku,
                 quantity=line.quantity,
-                unit_price_cents=product.unit_price_cents,
+                unit_price_cents=unit_price,
                 line_total_cents=line_total,
+                price_is_demo=price_is_demo,
             )
         )
 
-    provider, service_code, quote_reference = _simulation_quote(draft)
+    provider, service_code, quote_reference = _stored_quote(draft)
     order = Order(
         order_number=f"AV-{uuid.uuid4().hex[:10].upper()}",
         customer_name=draft.customer_name.strip(),
@@ -257,6 +277,7 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
         delivery_name=delivery.name.strip(),
         delivery_line1=delivery.line1.strip(),
         delivery_line2=delivery.line2.strip() if delivery.line2 else None,
+        delivery_suburb=delivery.suburb.strip() or None,
         delivery_city=delivery.city.strip(),
         delivery_region=delivery.region.strip(),
         delivery_postal_code=delivery.postal_code.strip(),
@@ -267,6 +288,9 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
         shipping_provider=provider,
         shipping_service_code=service_code,
         shipping_quote_reference=quote_reference,
+        terms_accepted=True if draft.terms_version else None,
+        terms_accepted_at=datetime.now(timezone.utc) if draft.terms_version else None,
+        terms_version=draft.terms_version,
         items=items,
         status_events=[
             OrderStatusEvent(field_name="payment_status", from_status=None, to_status="pending", actor="system"),
@@ -301,21 +325,30 @@ def _fingerprint(draft: OrderDraft) -> str:
         "delivery_name": draft.delivery.name.strip(),
         "delivery_postal_code": draft.delivery.postal_code.strip(),
         "delivery_region": draft.delivery.region.strip(),
+        "delivery_suburb": draft.delivery.suburb.strip(),
         "is_simulation": draft.is_simulation,
         "lines": sorted(
-            ({"product_id": str(line.product_id), "quantity": line.quantity} for line in draft.lines),
+            (
+                {
+                    "product_id": str(line.product_id),
+                    "quantity": line.quantity,
+                    "unit_price_cents": line.unit_price_cents,
+                }
+                for line in draft.lines
+            ),
             key=lambda item: item["product_id"],
         ),
         "shipping_cents": draft.shipping_cents,
         "shipping_provider": draft.shipping_provider,
         "shipping_quote_reference": draft.shipping_quote_reference,
         "shipping_service_code": draft.shipping_service_code,
+        "terms_version": draft.terms_version or "",
     }
     encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _simulation_quote(draft: OrderDraft) -> tuple[str | None, str | None, str | None]:
+def _stored_quote(draft: OrderDraft) -> tuple[str | None, str | None, str | None]:
     provider = draft.shipping_provider.strip() if draft.shipping_provider else None
     service_code = draft.shipping_service_code.strip() if draft.shipping_service_code else None
     reference = draft.shipping_quote_reference.strip() if draft.shipping_quote_reference else None
@@ -323,8 +356,14 @@ def _simulation_quote(draft: OrderDraft) -> tuple[str | None, str | None, str | 
         if provider != "simulated-courier" or not service_code or not reference:
             raise OrderValidationError("A simulated order needs its simulated delivery quote.")
         return provider, service_code, reference
+    if provider in {"bobgo", "shiplogic"}:
+        if not service_code or not reference:
+            raise OrderValidationError("A courier order needs the selected sandbox service and quote.")
+        if len(service_code) > 80 or len(reference) > 120:
+            raise OrderValidationError("The courier service details are too long to store.")
+        return provider, service_code, reference
     if provider or service_code or reference:
-        raise OrderValidationError("A delivery quote can only be stored on a simulated order.")
+        raise OrderValidationError("A delivery quote can only be stored for the simulated checkout or the ShipLogic sandbox.")
     return None, None, None
 
 

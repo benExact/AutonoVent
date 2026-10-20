@@ -24,9 +24,10 @@
             <li><a href="installation.html">Installation</a></li>
             <li><a href="faq.html" aria-current="page">FAQs</a></li>
           </ul>
-          <a class="button button--primary nav-quote" href="index.html#enquiry">Request a Quote</a>
+          <a class="button button--primary nav-quote" href="products.html">Shop</a>
         </nav>
         <div class="site-header__tools">
+          <a class="cart-link" href="cart.html">Cart <span data-cart-count>0</span></a>
           <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
             <span class="nav-toggle__icon" aria-hidden="true">
               <span class="nav-toggle__bar"></span>
@@ -72,13 +73,13 @@
             <li>
               <details>
                 <summary>Will it fit my vehicle?</summary>
-                <p>A vehicle and canopy fitment list has not been published. Describe your setup when you request a quote so it can be discussed properly.</p>
+                <p>A vehicle and canopy fitment list has not been published. The shop is where Autonovent is listed for purchase.</p>
               </details>
             </li>
             <li>
               <details>
                 <summary>How much does it cost?</summary>
-                <p>A selling price has not been published. Pricing is discussed through a quote request.</p>
+                <p>A confirmed selling price is shown on the shop when it has been saved for the product. In local development, an unpriced product can show a labelled test price. That test price is not a confirmed selling price.</p>
               </details>
             </li>
             <li>
@@ -89,13 +90,13 @@
             </li>
             <li>
               <details>
-                <summary>How do I request a quote?</summary>
-                <p>Use the quote form on the homepage. Delivery of that form is not connected yet, so a message sent from this preview is not received. A contact address needs to be configured before the public launch.</p>
+                <summary>How do I buy Autonovent?</summary>
+                <p>Open the shop, add the product to your cart, and continue to checkout. Delivery is limited to South Africa. The checkout delivery amount is calculated by the server.</p>
               </details>
             </li>
           </ul>
           <div class="link-row">
-            <a class="button button--primary" href="index.html#enquiry">Request a Quote</a>
+            <a class="button button--primary" href="products.html">Shop Now</a>
             <a class="button button--secondary" href="how-it-works.html">How It Works</a>
           </div>
         </div>
@@ -120,9 +121,13 @@
           </ul>
         </nav>
         <div>
-          <p class="footer-heading">Enquire</p>
+          <p class="footer-heading">Shop</p>
           <ul class="footer-links">
-            <li><a href="index.html#enquiry">Request a Quote</a></li>
+            <li><a href="products.html">Products</a></li>
+            <li><a href="cart.html">Cart</a></li>
+            <li><a href="terms.html">Terms and Conditions</a></li>
+            <li><a href="privacy.html">Privacy Notice</a></li>
+            <li><a href="shipping-and-returns.html">Shipping and returns</a></li>
           </ul>
           <p class="placeholder-note">Contact details have not been published yet.</p>
         </div>
@@ -131,6 +136,7 @@
         <p>&copy; <span data-copyright-year>2026</span> Autonovent</p>
       </div>
     </footer>
+    <script src="js/cart.js" defer></script>
     <script src="js/main.js" defer></script>
   </body>
 </html>

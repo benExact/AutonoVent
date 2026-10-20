@@ -17,7 +17,7 @@ AutonoVent is a small local system with a public website and a private owner are
 | Backend | A Python program built with FastAPI. It answers API requests. | `backend\app` |
 | Database | PostgreSQL 16, started by Docker Compose. | `docker-compose.yml` |
 | Migrations | Alembic updates the database structure in numbered steps. | `backend\alembic` |
-| Bob Go client | Code that can ask the Bob Go **sandbox** for courier rates. It does not book shipments and it does not call the live Bob Go site. | `backend\app\shipping` |
+| ShipLogic client | Code that can ask the ShipLogic **sandbox** for courier rates. It does not book shipments. | `backend\app\shipping` |
 | Tests | Automated checks. They use a separate database named `autonovent_test`. | `backend\tests` |
 | GitHub | The remote copy of the project. | `https://github.com/benExact/AutonoVent.git` |
 
@@ -161,12 +161,22 @@ Open `backend\.env` in an editor and check these names. Do not paste the file in
 | `APP_ENV` | Leave this as `development` on this PC. `production` turns on the secure-cookie flag, which local HTTP cannot use. |
 | `DATABASE_URL` | Must point at host `127.0.0.1`, port `5432`, and database `autonovent`. The user and password must match `POSTGRES_USER` and `POSTGRES_PASSWORD` in `docker-compose.yml`. |
 | `CORS_ORIGINS` | Includes `http://127.0.0.1:8765`. Do not use `*`. |
-| `BOBGO_BASE_URL` | Must stay `https://api.sandbox.bobgo.co.za/v2`. |
-| `BOBGO_API_TOKEN` | Empty until you create a sandbox token. Never commit a real token. |
-| `BOBGO_TIMEOUT_SECONDS` | How long a sandbox request may wait. The example value is `20`. |
+| `SHIPLOGIC_MODE` | `sandbox` when testing ShipLogic. Leave empty while simulated checkout is on. Live mode is rejected. |
+| `SHIPLOGIC_API_TOKEN` | Empty until you create a sandbox token. Never commit a real token. |
+| `SHIPLOGIC_SANDBOX_BASE_URL` | Must stay `https://api.shiplogic.com`. |
+| `SHIPLOGIC_TIMEOUT_SECONDS` | How long a sandbox request may wait. The example value is `20`. |
 | `CHECKOUT_SIMULATION_ENABLED` | `false` unless you are testing the simulated checkout. Must stay false when `APP_ENV` is `production`. |
-| `CHECKOUT_SIMULATION_RATES` | Test delivery amounts in cents, such as `standard:8500,express:14500`. These are not Bob Go prices. |
+| `CHECKOUT_SIMULATION_RATES` | Test delivery amounts in cents, such as `standard:8500,express:14500`. These are not ShipLogic prices. |
 | `CHECKOUT_SIMULATION_REGION_EXTRAS` | Optional extra test cents by province name, such as `Western Cape:2000`. |
+| `CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS` | Optional development-only test price in cents. Used only when a product has no confirmed `unit_price_cents`. It does not change the product record. Leave it empty in production. |
+| `EMAIL_TRANSPORT` | `capture`, `smtp`, or `resend`. `capture` does not open a network connection. Production must use `smtp` or `resend`. |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP server. Local Mailpit uses `127.0.0.1` and `1025`. |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | Optional SMTP credentials. Leave empty for Mailpit. Do not commit real credentials. |
+| `SMTP_USE_TLS` | `true` when the SMTP server requires STARTTLS. |
+| `EMAIL_FROM` | From address, for example `Autonovent <orders@example.com>`. Resend testing can use `onboarding@resend.dev` only for the account address until a domain is verified. |
+| `RESEND_API_KEY` | Resend API key. Leave empty unless `EMAIL_TRANSPORT=resend`. Do not commit it. |
+| `EMAIL_LOGO_URL` | Optional absolute logo URL. Leave empty to use the text wordmark. |
+| `EMAIL_MAX_ATTEMPTS` | How many times a queued notification may be attempted. |
 
 The shape of `DATABASE_URL`, with the secret left out, is:
 
@@ -176,13 +186,39 @@ postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/autonovent
 
 ### Simulated checkout
 
-The customer test journey is off until `backend\.env` contains `APP_ENV=development` and `CHECKOUT_SIMULATION_ENABLED=true`, plus test delivery amounts such as `CHECKOUT_SIMULATION_RATES=standard:8500,express:14500`. Those amounts are for the demonstration. They are not Bob Go prices. Restart the API after changing the file.
+The customer test journey is off until `backend\.env` contains `APP_ENV=development` and `CHECKOUT_SIMULATION_ENABLED=true`, plus test delivery amounts such as `CHECKOUT_SIMULATION_RATES=standard:8500,express:14500`. Those amounts are for the demonstration. They are not ShipLogic prices. Restart the API after changing the file.
 
-The confirmed unit price is R1,500. In the owner product form that is `150000` cents. Checkout will not invent a price when that field is empty.
+`CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS` is a separate local setting, also in `backend\.env`. It lets an active product with an empty selling price appear in the shop during development. The shop labels it as a test price. The value is snapshotted onto the order and is never written into `products.unit_price_cents`. A product that already has a selling price always uses that selling price. Leave the setting empty unless you are testing checkout. Production refuses to start if it is set.
 
 Open `http://127.0.0.1:8765/product.html`, add the listed product, and continue on `http://127.0.0.1:8765/checkout.html`. The owner order list marks these rows as simulated test orders.
 
 If `APP_ENV=production` and `CHECKOUT_SIMULATION_ENABLED=true` together, the API refuses to start. Keep the flag false for any production configuration. With the flag false, the quote and payment addresses respond with “not available”.
+
+## ShipLogic and PayFast sandbox
+
+Sandbox checkout is separate from the simulated checkout. Set `CHECKOUT_SIMULATION_ENABLED=false`, `COURIER_PROVIDER=shiplogic`, `SHIPLOGIC_MODE=sandbox`, and `PAYMENT_PROVIDER=payfast`. Also set `PAYFAST_MODE=sandbox`, the sandbox merchant ID, merchant key, passphrase, return URL, cancel URL, and an `https` `PAYFAST_NOTIFY_URL`. The API refuses to start if those PayFast or ShipLogic sandbox settings are missing, if simulation stays on, or if `APP_ENV=production`.
+
+ShipLogic rates also need the confirmed collection street address, suburb, city, zone, and postal code, plus the confirmed packed parcel description, length, width, height, and weight. Those fields stay empty until they are confirmed. The product size of 187 × 150 × 41 mm and 2 kg is not sent as the packed parcel. A missing value stops the quote with a message naming the missing field. The checkout does not substitute a simulated price.
+
+PayFast cannot call `http://127.0.0.1`. For the notification, run a tunnel that forwards only to the API and put that public `https` URL, ending in `/api/v1/payments/payfast/itn`, in `PAYFAST_NOTIFY_URL`. Do not commit the URL. If the tunnel connects from this computer, set `PAYFAST_FORWARDED_IP_HEADER` to the header that carries PayFast’s IP, such as `CF-Connecting-IP`. The API still checks that IP against PayFast’s published ranges, checks the signature, and asks the PayFast sandbox to validate the notification. Opening the return page does not mark the order paid.
+
+Shipment booking is not called. The ShipLogic docs describe `POST /shipments`, label download, tracking, and cancellation, but this checkout only requests rates. No shipment, label, or tracking number is created.
+
+The local checkout page is `http://127.0.0.1:8765/checkout.html`. Owner orders are at `http://127.0.0.1:8765/owner/orders.html`.
+
+### Customer order emails
+
+A successful payment queues one confirmation. An owner fulfilment change queues one status email to the address saved on the order. Failed, cancelled, and pending payments do not send a payment confirmation. The order change is saved first. Email delivery runs after that commit, so a mail-server failure does not undo the order.
+
+For local inspection, start Mailpit without touching the database volume:
+
+```
+docker compose up -d mailpit
+```
+
+Set `EMAIL_TRANSPORT=smtp`, `SMTP_HOST=127.0.0.1`, and `SMTP_PORT=1025` in `backend\.env`, then restart the API. Open captured messages at http://127.0.0.1:8025. Leave `EMAIL_TRANSPORT=capture` when you do not want the API to connect to SMTP. To use Resend instead, set `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, and `EMAIL_FROM`, then restart the API. Switch back to Mailpit by setting `EMAIL_TRANSPORT=smtp` again. The Mailpit host settings stay in the file. Production refuses to start when `EMAIL_TRANSPORT=capture`.
+
+A later real provider uses the same queue. Put its SMTP host, port, from address, and credentials in the environment. Do not commit those credentials. Acceptance by SMTP is recorded as accepted, not as a confirmed delivery.
 
 ### 5. Start Docker Desktop
 
@@ -592,25 +628,31 @@ Before a migration that changes or removes real customer data, make a backup fir
 
 `alembic.ini` contains a placeholder database URL. Leave it. The command reads the real URL from `backend\.env`.
 
-## 11. Bob Go sandbox
+`20261016_0007` adds nullable terms-acceptance columns on `orders`. Existing orders stay without an acceptance record. Apply it with `alembic upgrade head` from `backend`. It does not delete orders or reset the database volume.
 
-The shipping code can request rates from Bob Go’s sandbox only:
+Address search is optional. In `backend\.env`, set `ADDRESS_PROVIDER=google` and `GOOGLE_PLACES_API_KEY` to a Google Places API (New) key restricted to this server. Leave `ADDRESS_PROVIDER` empty until you have that key. The checkout then keeps manual address entry. Do not put the key in a JavaScript file.
 
-`https://api.sandbox.bobgo.co.za/v2`
+## 11. ShipLogic sandbox
 
-The path it calls is `POST /rates`. It rejects the production host `https://api.bobgo.co.za`. It does not book a shipment.
+The shipping code can request rates from the documented ShipLogic sandbox host only:
+
+`https://api.shiplogic.com`
+
+The path it calls is `POST /rates`. The public documentation says the sandbox uses that host, and that the sandbox account token selects the sandbox. Any other host is rejected. It does not book a shipment.
 
 Settings, all in `backend\.env`:
 
 | Name | Role |
 | --- | --- |
-| `BOBGO_BASE_URL` | Must remain the sandbox URL above. |
-| `BOBGO_API_TOKEN` | The sandbox token from a sandbox account at https://sandbox.bobgo.co.za/ |
-| `BOBGO_TIMEOUT_SECONDS` | Request limit. The example file uses `20`. |
+| `COURIER_PROVIDER` | `shiplogic` for sandbox checkout. Leave empty while simulated checkout is on. |
+| `SHIPLOGIC_MODE` | Must be `sandbox`. |
+| `SHIPLOGIC_API_TOKEN` | The bearer token from Integrations > API Keys after registering at https://sandbox.shiplogic.com/register |
+| `SHIPLOGIC_SANDBOX_BASE_URL` | Must remain `https://api.shiplogic.com`. |
+| `SHIPLOGIC_TIMEOUT_SECONDS` | Request limit. The example file uses `20`. |
 
-Create the token in the Bob Go sandbox, then paste it only into `backend\.env`. `.env` is listed in `.gitignore`. `.env.example` keeps `BOBGO_API_TOKEN` empty on purpose.
+Create the token in the ShipLogic sandbox, then paste it only into `backend\.env`. `.env` is listed in `.gitignore`. `.env.example` keeps `SHIPLOGIC_API_TOKEN` empty on purpose.
 
-The automated Bob Go tests use a fake HTTP response. A passing test does **not** mean a real sandbox call worked.
+The automated ShipLogic tests use a fake HTTP response. A passing test does **not** mean a real sandbox call worked.
 
 A real quote is still blocked until all of these exist. Do not invent them.
 
@@ -618,9 +660,9 @@ A real quote is still blocked until all of these exist. Do not invent them.
 - The collection street address, suburb (`local_area`), city, zone, and postal code. The public name of the collection place is the Rhino Canopies manufacturing warehouse in Pretoria. The street fields are not in the project.
 - Packed parcel dimensions and weight. The product’s unit size, 187 × 150 × 41 mm and 2 kg, is **not** a packed parcel and is not sent as one.
 
-The owner readiness page reports whether a token is present. It does not show the token, and it does not claim a rate test succeeded unless one has been recorded. None is recorded by the current code.
+The owner readiness page reports whether the provider, sandbox mode, and token are present. It does not show the token, and it does not claim a rate test succeeded. None is recorded by the current code.
 
-There is no website button that asks Bob Go for a price.
+Checkout asks ShipLogic for a price only when sandbox checkout is the active mode. Simulated checkout does not.
 
 ## 12. Troubleshooting
 
@@ -726,9 +768,9 @@ A wrong email or password returns the same message: `The email or password is no
 
 Start Docker and `docker compose up -d`. Then run pytest again from `backend`. A connection error to port `5432` means the database is down. Do not point `DATABASE_URL` at a remote server to make the tests pass.
 
-### A Bob Go quote cannot be made
+### A ShipLogic quote cannot be made
 
-The usual gaps are an empty `BOBGO_API_TOKEN`, a missing collection address, or missing packed size and weight. The unit measurements are not a substitute. The readiness page is only a checklist. It does not call Bob Go.
+The usual gaps are an empty `SHIPLOGIC_API_TOKEN`, `SHIPLOGIC_MODE` not set to `sandbox`, a missing collection address, or missing packed size and weight. The unit measurements are not a substitute. The readiness page is only a checklist. It does not call ShipLogic. Simulated checkout is a different mode and does not return ShipLogic prices.
 
 ## 13. Stopping the project
 
@@ -825,7 +867,7 @@ Never commit:
 - `backend\.env` or any other `.env` file that holds a password or token
 - `backend\.venv\`
 - `backups\` or a `.dump` file
-- A password, session cookie, or Bob Go token typed into a source file
+- A password, session cookie, or ShipLogic token typed into a source file
 
 `.gitignore` already ignores `.env`, `.venv`, `backups\`, and `*.dump`. `git status` should not list those. If it does, do not `git add` them.
 

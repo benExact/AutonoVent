@@ -1,6 +1,7 @@
 """Development-only simulated checkout. Owner routes stay on their own router."""
 
 import uuid
+from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
@@ -8,13 +9,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.auth.service import CSRF_FAILED, anonymous_csrf_ok
+from app.checkout.sandbox import apply_payfast_itn, payfast_redirect, place_sandbox_order, quote_sandbox, source_ip
 from app.checkout.service import (
     PAYMENT_LABEL,
-    SIMULATED_LABEL,
     CheckoutConflict,
     CheckoutError,
     CheckoutNotFound,
     CheckoutResult,
+    CheckoutUnavailable,
     CheckoutValidationError,
     address_from_parts,
     place_simulated_order,
@@ -28,6 +30,7 @@ from app.schemas.checkout import (
     CheckoutOrderView,
     CheckoutStatus,
     OrderRequest,
+    PayfastSessionView,
     PaymentRequest,
     QuoteOptionView,
     QuoteRequest,
@@ -38,6 +41,16 @@ from app.shipping.simulated import SIMULATED_PROVIDER
 
 router = APIRouter()
 UNAVAILABLE = "Checkout simulation is temporarily unavailable."
+
+
+def require_checkout() -> Settings:
+    try:
+        settings = get_settings()
+    except ValidationError:
+        raise HTTPException(status_code=404, detail="Checkout is not available.") from None
+    if settings.checkout_mode == "unavailable":
+        raise HTTPException(status_code=404, detail="Checkout is not available.")
+    return settings
 
 
 def require_simulation() -> Settings:
@@ -58,9 +71,9 @@ def _csrf(request: Request) -> None:
 def _view(result: CheckoutResult) -> CheckoutOrderView:
     order = result.order
     return CheckoutOrderView(
-        simulation=True,
+        simulation=order.is_simulation,
         label=result.label,
-        payment_label=PAYMENT_LABEL if result.payment_provider == "simulated" else PAYMENT_LABEL,
+        payment_label=result.payment_label,
         id=order.id,
         order_number=order.order_number,
         currency=order.currency,
@@ -86,6 +99,7 @@ def _address(body):
         name=body.name,
         line1=body.line1,
         line2=body.line2,
+        suburb=body.local_area,
         city=body.city,
         region=body.region,
         postal_code=body.postal_code,
@@ -98,28 +112,39 @@ def checkout_status() -> CheckoutStatus:
     try:
         settings = get_settings()
     except ValidationError:
-        return CheckoutStatus(simulation_enabled=False)
-    return CheckoutStatus(simulation_enabled=settings.checkout_simulation_active)
+        return CheckoutStatus(simulation_enabled=False, checkout_mode="unavailable")
+    return CheckoutStatus(
+        simulation_enabled=settings.checkout_simulation_active,
+        checkout_mode=settings.checkout_mode,
+        courier_provider=settings.courier_provider or ("simulated" if settings.checkout_simulation_active else ""),
+        payment_provider=settings.payment_provider or ("simulated" if settings.checkout_simulation_active else ""),
+    )
 
 
 @router.post("/checkout/quotes", response_model=QuoteResponse)
 def checkout_quotes(
     body: QuoteRequest,
     request: Request,
-    settings: Settings = Depends(require_simulation),
+    settings: Settings = Depends(require_checkout),
     session: Session = Depends(get_session),
 ) -> QuoteResponse:
     _csrf(request)
     try:
-        quoted = quote_delivery(session, settings, delivery=_address(body.delivery), lines=_lines(body.lines))
+        if settings.checkout_mode == "sandbox":
+            quoted = quote_sandbox(session, settings, delivery=_address(body.delivery), lines=_lines(body.lines))
+        else:
+            quoted = quote_delivery(session, settings, delivery=_address(body.delivery), lines=_lines(body.lines))
     except CheckoutValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    except CheckoutUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    sandbox = settings.checkout_mode == "sandbox"
     return QuoteResponse(
-        simulation=True,
-        provider=SIMULATED_PROVIDER,
-        label=SIMULATED_LABEL,
+        simulation=not sandbox,
+        provider="shiplogic" if sandbox else SIMULATED_PROVIDER,
+        label=quoted.label,
         currency=quoted.currency,
         subtotal_cents=quoted.subtotal_cents,
         lines=[
@@ -129,6 +154,7 @@ def checkout_quotes(
                 quantity=line.quantity,
                 unit_price_cents=line.unit_price_cents,
                 line_total_cents=line.line_total_cents,
+                price_is_demo=line.price_is_demo,
             )
             for line in quoted.lines
         ],
@@ -151,11 +177,27 @@ def checkout_quotes(
 def checkout_order(
     body: OrderRequest,
     request: Request,
-    settings: Settings = Depends(require_simulation),
+    settings: Settings = Depends(require_checkout),
     session: Session = Depends(get_session),
 ) -> CheckoutOrderView:
     _csrf(request)
     try:
+        if settings.checkout_mode == "sandbox":
+            result = place_sandbox_order(
+                session,
+                settings,
+                idempotency_key=body.idempotency_key,
+                customer_name=body.customer_name,
+                customer_email=body.customer_email,
+                customer_phone=body.customer_phone,
+                delivery=_address(body.delivery),
+                lines=_lines(body.lines),
+                service_code=body.service_code,
+                expected_shipping_cents=body.expected_shipping_cents,
+                accept_terms=body.accept_terms,
+                terms_version=body.terms_version,
+            )
+            return _view(result)
         result = place_simulated_order(
             session,
             settings,
@@ -167,14 +209,62 @@ def checkout_order(
             lines=_lines(body.lines),
             service_code=body.service_code,
             expected_shipping_cents=body.expected_shipping_cents,
+            accept_terms=body.accept_terms,
+            terms_version=body.terms_version,
         )
     except CheckoutConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except CheckoutValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    except CheckoutUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
     return _view(result)
+
+
+@router.post("/checkout/orders/{order_id}/payfast", response_model=PayfastSessionView)
+def checkout_payfast(
+    order_id: uuid.UUID,
+    request: Request,
+    settings: Settings = Depends(require_checkout),
+    session: Session = Depends(get_session),
+) -> PayfastSessionView:
+    _csrf(request)
+    if settings.checkout_mode != "sandbox":
+        raise HTTPException(status_code=404, detail="PayFast sandbox checkout is not available.")
+    try:
+        redirect = payfast_redirect(session, settings, order_id)
+    except CheckoutNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except CheckoutConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except CheckoutError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return PayfastSessionView(action=redirect.action, fields=redirect.fields)
+
+
+@router.post("/payments/payfast/itn")
+async def payfast_itn(request: Request, session: Session = Depends(get_session)) -> dict[str, str]:
+    try:
+        settings = get_settings()
+    except ValidationError:
+        raise HTTPException(status_code=404, detail="PayFast sandbox checkout is not available.") from None
+    if settings.checkout_mode != "sandbox":
+        raise HTTPException(status_code=404, detail="PayFast sandbox checkout is not available.")
+    pairs = parse_qsl((await request.body()).decode(), keep_blank_values=True, encoding="utf-8")
+    peer = request.client.host if request.client is not None else ""
+    header_name = settings.payfast_forwarded_ip_header.strip()
+    forwarded = request.headers.get(header_name) if header_name else None
+    try:
+        apply_payfast_itn(session, settings, pairs=pairs, source_ip=source_ip(peer, forwarded, settings))
+    except CheckoutUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except CheckoutError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="The payment notification could not be recorded.") from None
+    return {"status": "ok"}
 
 
 @router.post("/checkout/orders/{order_id}/payment", response_model=CheckoutOrderView)

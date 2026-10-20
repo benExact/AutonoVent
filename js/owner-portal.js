@@ -16,6 +16,7 @@
     cancelled: "Cancelled",
     unfulfilled: "Unfulfilled",
     processing: "Processing",
+    packed: "Packed",
     shipped: "Shipped",
     delivered: "Delivered",
     payment_status: "Payment",
@@ -110,6 +111,7 @@
       ["Payment pending", summary.payment.pending],
       ["Unfulfilled", summary.fulfilment.unfulfilled],
       ["Processing", summary.fulfilment.processing],
+      ["Packed", summary.fulfilment.packed],
       ["Shipped", summary.fulfilment.shipped],
     ];
     host.replaceChildren();
@@ -212,7 +214,13 @@
   function deliveryText(order) {
     const amount = money(order.shipping_cents, order.currency);
     if (order.shipping_provider === "simulated-courier") {
-      return amount + " · Simulated courier. This is not a Bob Go price. " + (order.shipping_service_code || "") + " " + (order.shipping_quote_reference || "");
+      return amount + " · Simulated courier. This is not a ShipLogic price. " + (order.shipping_service_code || "") + " " + (order.shipping_quote_reference || "");
+    }
+    if (order.shipping_provider === "bobgo") {
+      return amount + " · Bob Go sandbox rate. This is not a live courier booking. " + (order.shipping_service_code || "") + " " + (order.shipping_quote_reference || "");
+    }
+    if (order.shipping_provider === "shiplogic") {
+      return amount + " · ShipLogic sandbox rate. This is not a live courier booking. " + (order.shipping_service_code || "") + " " + (order.shipping_quote_reference || "");
     }
     return amount;
   }
@@ -221,6 +229,9 @@
     const status = label(order.payment_status);
     if (order.is_simulation || order.payment_provider === "simulated") {
       return status + " · Simulated payment. This is not a PayFast payment.";
+    }
+    if (order.payment_provider === "payfast") {
+      return status + " · PayFast sandbox. This is not a live payment.";
     }
     if (order.payment_provider) {
       return status + " · " + order.payment_provider;
@@ -252,7 +263,7 @@
 
     const facts = document.createElement("dl");
     facts.className = "owner-facts";
-    const address = [order.delivery_name, order.delivery_line1, order.delivery_line2, order.delivery_city, order.delivery_region, order.delivery_postal_code, order.delivery_country]
+    const address = [order.delivery_name, order.delivery_line1, order.delivery_line2, order.delivery_suburb, order.delivery_city, order.delivery_region, order.delivery_postal_code, order.delivery_country]
       .filter((part) => typeof part === "string" && part.trim())
       .join(", ");
     [
@@ -266,6 +277,7 @@
       ["Total", money(order.total_cents, order.currency)],
       ["Payment", paymentText(order)],
       ["Payment reference", textOrMissing(order.payment_reference)],
+      ["Terms", order.terms_accepted ? (order.terms_version || "Accepted") : "Not recorded"],
       ["Fulfilment", label(order.fulfilment_status)],
     ].forEach((pair) => facts.append(field(pair[0], pair[1])));
     host.append(facts);
@@ -282,7 +294,7 @@
       list.className = "owner-items";
       order.items.forEach((item) => {
         const row = document.createElement("li");
-        row.textContent = item.quantity + " × " + item.product_name + " (" + textOrMissing(item.sku) + ") — " + money(item.unit_price_cents, order.currency) + " each, " + money(item.line_total_cents, order.currency);
+        row.textContent = item.quantity + " × " + item.product_name + " (" + textOrMissing(item.sku) + ") — " + money(item.unit_price_cents, order.currency) + " each, " + money(item.line_total_cents, order.currency) + (item.price_is_demo ? ". Test price — not a confirmed selling price." : "");
         list.append(row);
       });
       host.append(list);

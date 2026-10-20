@@ -16,6 +16,7 @@ class PublicProduct(BaseModel):
     unit_price_cents: int
     currency: str
     active: bool
+    price_is_demo: bool = False
 
 
 class CatalogueResponse(BaseModel):

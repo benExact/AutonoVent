@@ -1,4 +1,4 @@
-"""Test delivery quotes. These amounts are configuration, not Bob Go prices."""
+"""Test delivery quotes. These amounts are configuration, not ShipLogic prices."""
 
 from dataclasses import dataclass
 
@@ -15,7 +15,7 @@ PROVINCES = (
 )
 _PROVINCE_LOOKUP = {name.casefold(): name for name in PROVINCES}
 SIMULATED_PROVIDER = "simulated-courier"
-SIMULATED_LABEL = "Simulated delivery. This is not a Bob Go price."
+SIMULATED_LABEL = "Simulated delivery. This is not a ShipLogic price."
 
 
 class SimulatedConfigurationError(Exception):

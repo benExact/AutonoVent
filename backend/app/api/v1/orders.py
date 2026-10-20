@@ -61,6 +61,7 @@ def _detail(session: Session, order: Order) -> OrderDetail:
         delivery_name=order.delivery_name,
         delivery_line1=order.delivery_line1,
         delivery_line2=order.delivery_line2,
+        delivery_suburb=order.delivery_suburb,
         delivery_city=order.delivery_city,
         delivery_region=order.delivery_region,
         delivery_postal_code=order.delivery_postal_code,
@@ -70,6 +71,9 @@ def _detail(session: Session, order: Order) -> OrderDetail:
         shipping_provider=order.shipping_provider,
         shipping_service_code=order.shipping_service_code,
         shipping_quote_reference=order.shipping_quote_reference,
+        terms_accepted=order.terms_accepted,
+        terms_accepted_at=order.terms_accepted_at,
+        terms_version=order.terms_version,
         items=[
             OrderItemView(
                 product_name=item.product_name,
@@ -77,6 +81,7 @@ def _detail(session: Session, order: Order) -> OrderDetail:
                 quantity=item.quantity,
                 unit_price_cents=item.unit_price_cents,
                 line_total_cents=item.line_total_cents,
+                price_is_demo=item.price_is_demo,
             )
             for item in items
         ],

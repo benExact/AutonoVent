@@ -130,31 +130,78 @@ def readiness(
         price_ready, price_detail = selling_price_status(session)
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
-    token_configured = bool(get_settings().bobgo_api_token.strip())
-    courier = "A Bob Go sandbox token is configured." if token_configured else "No Bob Go sandbox token is configured."
-    courier += " No successful sandbox rate test has been recorded."
+    settings = get_settings()
+    collection_ready = all(
+        value.strip()
+        for value in (
+            settings.collection_street_address,
+            settings.collection_local_area,
+            settings.collection_city,
+            settings.collection_zone,
+            settings.collection_postal_code,
+        )
+    )
+    parcel_ready = bool(settings.packed_parcel_description.strip()) and all(
+        value is not None
+        for value in (
+            settings.packed_parcel_length_mm,
+            settings.packed_parcel_width_mm,
+            settings.packed_parcel_height_mm,
+            settings.packed_parcel_weight_grams,
+        )
+    )
+    provider_ready = settings.courier_provider == "shiplogic"
+    mode_ready = settings.shiplogic_mode == "sandbox"
+    token_ready = bool(settings.shiplogic_api_token.strip())
+    quote_ready = provider_ready and mode_ready and token_ready and collection_ready and parcel_ready
     return ReadinessReport(
         checkout_enabled=False,
-        checkout_simulation_enabled=get_settings().checkout_simulation_active,
+        checkout_simulation_enabled=settings.checkout_simulation_active,
         items=[
             ReadinessItem(key="selling_price", label="Confirmed selling price", ready=price_ready, detail=price_detail),
             ReadinessItem(
                 key="collection_address",
                 label="Collection address and postal code",
-                ready=False,
-                detail="The collection street address, suburb, zone, and postal code have not been recorded.",
+                ready=collection_ready,
+                detail="The collection street address, suburb, city, zone, and postal code are configured."
+                if collection_ready
+                else "The collection street address, suburb, city, zone, and postal code have not been recorded.",
             ),
             ReadinessItem(
                 key="packed_parcel",
                 label="Packed parcel dimensions and weight",
-                ready=False,
-                detail="Packed parcel dimensions and weight have not been recorded.",
+                ready=parcel_ready,
+                detail="The packed parcel description, dimensions, and weight are configured."
+                if parcel_ready
+                else "Packed parcel dimensions and weight have not been recorded.",
             ),
             ReadinessItem(
-                key="bobgo",
-                label="Bob Go sandbox rate test",
+                key="shiplogic_provider",
+                label="ShipLogic provider",
+                ready=provider_ready,
+                detail="COURIER_PROVIDER is shiplogic." if provider_ready else "COURIER_PROVIDER is not shiplogic.",
+            ),
+            ReadinessItem(
+                key="shiplogic_mode",
+                label="ShipLogic sandbox mode",
+                ready=mode_ready,
+                detail="SHIPLOGIC_MODE is sandbox." if mode_ready else "SHIPLOGIC_MODE is not sandbox. Live courier mode is disabled.",
+            ),
+            ReadinessItem(
+                key="shiplogic_token",
+                label="ShipLogic sandbox token",
+                ready=token_ready,
+                detail="A ShipLogic sandbox token is configured." if token_ready else "No ShipLogic sandbox token is configured.",
+            ),
+            ReadinessItem(
+                key="shiplogic_quote",
+                label="ShipLogic sandbox quote test",
                 ready=False,
-                detail=courier,
+                detail=(
+                    "The sandbox configuration is complete. No successful sandbox rate test has been recorded."
+                    if quote_ready
+                    else "The sandbox configuration is incomplete. No successful sandbox rate test has been recorded."
+                ),
             ),
             ReadinessItem(
                 key="payment",

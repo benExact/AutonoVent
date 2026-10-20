@@ -8,4 +8,5 @@ __pycache__/
 .pytest_cache/
 *.pyc
 backups/
+backend/.shiplogic-rate-response.json
 *.dump

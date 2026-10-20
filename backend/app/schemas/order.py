@@ -12,6 +12,7 @@ class OrderItemView(BaseModel):
     quantity: int
     unit_price_cents: int
     line_total_cents: int
+    price_is_demo: bool = False
 
 
 class StatusEventView(BaseModel):
@@ -49,6 +50,7 @@ class OrderDetail(OrderListItem):
     delivery_name: str | None
     delivery_line1: str | None
     delivery_line2: str | None
+    delivery_suburb: str | None
     delivery_city: str | None
     delivery_region: str | None
     delivery_postal_code: str | None
@@ -58,6 +60,9 @@ class OrderDetail(OrderListItem):
     shipping_provider: str | None
     shipping_service_code: str | None
     shipping_quote_reference: str | None
+    terms_accepted: bool | None
+    terms_accepted_at: datetime | None
+    terms_version: str | None
     items: list[OrderItemView]
     status_events: list[StatusEventView]
     allowed_fulfilment_statuses: list[str]

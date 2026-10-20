@@ -40,6 +40,7 @@ def _prepare(monkeypatch, database_url: str) -> None:
         connection.execute(text("DELETE FROM order_items"))
         connection.execute(text("DELETE FROM payments"))
         connection.execute(text("DELETE FROM shipments"))
+        connection.execute(text("DELETE FROM email_notifications"))
         connection.execute(text("DELETE FROM orders"))
         connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))

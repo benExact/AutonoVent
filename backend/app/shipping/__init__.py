@@ -1,1 +1,1 @@
-"""Shipping providers. Checkout and shipment booking are not implemented."""
+"""Shipping providers. ShipLogic sandbox quotes are implemented. Shipment booking is not."""

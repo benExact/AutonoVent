@@ -115,7 +115,7 @@ When order creation is implemented, it will follow these rules:
 
 There is no public order endpoint. `GET /api/v1/orders` and `POST /api/v1/orders` are not registered. Customer details are not returned by the catalogue or health routes.
 
-The internal order service records an order, its item snapshots, and the opening status events in one transaction. Item prices are read from `products.unit_price_cents`. A line is rejected when the product is missing, inactive, or has no price, and that rejection leaves no partial order. Shipping is stored only when the server supplies `shipping_cents`. The service does not default it to zero and does not call Bob Go.
+The internal order service records an order, its item snapshots, and the opening status events in one transaction. Item prices are read from `products.unit_price_cents`. A line is rejected when the product is missing, inactive, or has no price, and that rejection leaves no partial order. Shipping is stored only when the server supplies `shipping_cents`. The service does not default it to zero. Simulated checkout does not call ShipLogic.
 
 Repeated creation with the same idempotency key and the same request returns the original order. The same key with a different request raises a conflict and does not insert another order. The key and its fingerprint are stored on `orders` by migration `20261014_0002`.
 
@@ -157,7 +157,7 @@ Owner product routes are under `/api/v1/admin`. Listing and the readiness checkl
 - `GET /api/v1/admin/products` returns every saved product, including inactive products and products with no price.
 - `POST /api/v1/admin/products` and `PATCH /api/v1/admin/products/{id}` save the name, slug, description, optional SKU, price in integer cents, currency `ZAR`, and active flag. An empty price is stored as no price. Negative prices, fractional prices, and other currencies are rejected.
 - The public catalogue is unchanged: only an active product with a price is returned. Changing a product does not change prices already copied onto an order.
-- `GET /api/v1/admin/readiness` reports whether a selling price is saved and states that the collection address, packed parcel size, Bob Go rate test, and payment setup are still missing. It never returns a token. `checkout_enabled` stays false.
+- `GET /api/v1/admin/readiness` reports the selling price, collection address, packed parcel, and whether ShipLogic sandbox settings are present. A configured token is not treated as a successful sandbox quote. It never returns a token. `checkout_enabled` stays false.
 - `GET /api/v1/admin/products/{id}/audit` returns the owner email, time, and previous and new values for product fields. It is not public. Order fulfilment history stays in `order_status_events` and is not reused for products.
 
 Migration `20261015_0003` adds `product_audit_events`. A product save and its audit row commit together. The log stores only product fields: name, slug, description, SKU, price in cents, currency, and active flag.
@@ -168,13 +168,11 @@ Migration `20261015_0002` widens `order_status_events.actor` from 160 to 254 cha
 
 After signing in at `http://127.0.0.1:8765/owner/login.html`, the browser opens `http://127.0.0.1:8765/owner/orders.html`. The API stays on `http://127.0.0.1:8001`. Use the same host for both. An empty database shows zero counts and “No orders have been recorded.”
 
-## Bob Go sandbox rates
+## ShipLogic sandbox rates
 
-Rate quotes use Bob Go API v2 sandbox only: `https://api.sandbox.bobgo.co.za/v2`. The official collection authenticates with a bearer token and requests courier rates at `POST /rates`. Production (`https://api.bobgo.co.za/v2`) is rejected. The client does not create shipments.
+Rate quotes use the documented ShipLogic sandbox host `https://api.shiplogic.com` and `POST /rates`, with `Authorization: Bearer` and the sandbox account token. The public docs state that the sandbox uses that host. Any other host is rejected. Live courier mode is not implemented. The client does not create shipments, labels, or tracking numbers.
 
-`POST /rates-at-checkout` is not used. That endpoint requires an item price, and no selling price has been confirmed.
-
-The product’s unit size is 187 × 150 × 41 mm and its unit weight is 2 kg. Those are not confirmed packed parcel measurements, so they are not sent as shipping dimensions. A quote also needs the Rhino Canopies warehouse street address, suburb, province or zone, and postal code. None of those address fields has been supplied. Put the sandbox token in `backend/.env` as `BOBGO_API_TOKEN`. The example file leaves it empty.
+The product’s unit size is 187 × 150 × 41 mm and its unit weight is 2 kg. Those are not confirmed packed parcel measurements, so they are not sent as shipping dimensions. A quote also needs the Rhino Canopies warehouse street address, suburb, city, zone, and postal code. Put the sandbox token in `backend/.env` as `SHIPLOGIC_API_TOKEN`, with `SHIPLOGIC_MODE=sandbox`. The example file leaves the token empty. Older orders may still store provider `bobgo`; new sandbox quotes use `shiplogic`.
 
 ## Public website
 
@@ -227,18 +225,22 @@ Nothing in this milestone is deployed.
 - Run the FastAPI process behind HTTPS. A small virtual machine with a reverse proxy, or a container host, is enough. The API process should not be exposed without TLS.
 - Run PostgreSQL on a private network reachable only by the API. Do not publish port 5432 to the internet.
 - Set `CORS_ORIGINS` to the real website origin. Wildcard CORS is rejected.
-- Accounts that will be needed later, and are not created here: the static host, the API host, a PostgreSQL service, a domain and certificate, a PayFast merchant account, and Bob Go API access.
+- Accounts that will be needed later, and are not created here: the static host, the API host, a PostgreSQL service, a domain and certificate, a PayFast merchant account, and a production ShipLogic account. Sandbox ShipLogic is separate and is not a live courier.
 
 ## Simulated checkout
 
-Local development can exercise a full test purchase without PayFast or Bob Go. It stays off unless `APP_ENV=development` and `CHECKOUT_SIMULATION_ENABLED=true`. If `APP_ENV=production` and the flag is true, the API refuses to start. Quote, order, and payment routes then respond `404`.
+Local development can exercise a full test purchase without PayFast or ShipLogic. It stays off unless `APP_ENV=development` and `CHECKOUT_SIMULATION_ENABLED=true`. If `APP_ENV=production` and the flag is true, the API refuses to start. Quote, order, and payment routes then respond `404`.
 
 Test delivery amounts belong in `CHECKOUT_SIMULATION_RATES` as `code:cents` pairs, for example `standard:8500,express:14500`. Optional province extras use the province name, for example `Western Cape:2000`. These figures are test configuration. They are not courier prices. The selected amount, provider `simulated-courier`, and quote reference are stored on the order.
 
-The confirmed unit price is R1,500, stored as `150000` cents. Checkout reads `products.unit_price_cents` and ignores prices sent by the browser. A failed or cancelled simulated payment leaves the order unpaid. A successful one stores provider `simulated` and a `sim-` reference. It is not a PayFast payment. No card number is collected.
+Checkout reads `products.unit_price_cents` and ignores prices sent by the browser. When that column is empty, development can supply `CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS`. That test amount is labelled in the shop, snapshotted on the order, and is not saved as the product’s selling price. Production refuses to start if the demo price is set. A failed or cancelled simulated payment leaves the order unpaid. A successful one stores provider `simulated` and a `sim-` reference. It is not a PayFast payment. No card number is collected.
 
-The product page shows “Add to simulated checkout” only while simulation is enabled. The test page is `checkout.html`. Owner orders from this flow are marked “Simulated test order”. `checkout_enabled` on the readiness report stays false.
+The shop is `products.html`. The cart is `cart.html`. Checkout is `checkout.html`. Owner orders from this flow are marked “Simulated test order”. `checkout_enabled` on the readiness report stays false.
+
+Checkout can search South African addresses when `ADDRESS_PROVIDER=google` and `GOOGLE_PLACES_API_KEY` is set in `backend/.env`. The key stays on the server. With no key, the customer types the address. A suggestion does not prove the address can be delivered. Placing an order requires acceptance of terms version `v1.0-draft`. The draft terms are `terms.html` and the privacy notice is `privacy.html`. Acceptance is stored on that order. Opening the terms page does not record acceptance.
+
+Customer emails are queued in `email_notifications` in the same transaction as a confirmed payment or a fulfilment change, then delivered after commit. `EMAIL_TRANSPORT=capture` does not open a network connection. `smtp` reaches local Mailpit at http://127.0.0.1:8025. `resend` uses the Resend API with `RESEND_API_KEY` kept in `backend/.env`. Fulfilment moves from processing to packed before it can be shipped.
 
 ## Not in this milestone
 
-PayFast, live courier booking, stock tracking, and production deployment are intentionally absent. Backups are manual and local only.
+Live PayFast, live ShipLogic, shipment booking, stock tracking, and production deployment are not part of the sandbox quote integration. Backups are manual and local only.

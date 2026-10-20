@@ -29,6 +29,9 @@ PRODUCT = {
 
 def _use_database(monkeypatch, database_url: str) -> None:
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
     get_settings.cache_clear()
     reset_engine()
     engine = create_engine(database_url)
@@ -40,6 +43,7 @@ def _use_database(monkeypatch, database_url: str) -> None:
         connection.execute(text("DELETE FROM order_items"))
         connection.execute(text("DELETE FROM payments"))
         connection.execute(text("DELETE FROM shipments"))
+        connection.execute(text("DELETE FROM email_notifications"))
         connection.execute(text("DELETE FROM orders"))
         connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
@@ -228,21 +232,35 @@ def test_readiness_checklist_hides_secrets_and_does_not_invent_details(monkeypat
     _use_database(monkeypatch, isolated_database_url)
     _owner(isolated_database_url)
     _login()
-    monkeypatch.setenv("BOBGO_API_TOKEN", "fixture-secret-token")
+    monkeypatch.setenv("SHIPLOGIC_API_TOKEN", "fixture-secret-token")
+    monkeypatch.setenv("SHIPLOGIC_MODE", "sandbox")
+    monkeypatch.setenv("COURIER_PROVIDER", "")
+    monkeypatch.setenv("COLLECTION_STREET_ADDRESS", "1 Fixture Street")
+    monkeypatch.setenv("COLLECTION_LOCAL_AREA", "Fixture suburb")
+    monkeypatch.setenv("COLLECTION_CITY", "Pretoria")
+    monkeypatch.setenv("COLLECTION_ZONE", "Gauteng")
+    monkeypatch.setenv("COLLECTION_POSTAL_CODE", "0002")
+    monkeypatch.setenv("PACKED_PARCEL_DESCRIPTION", "Fixture packed parcel")
+    monkeypatch.setenv("PACKED_PARCEL_LENGTH_MM", "200")
+    monkeypatch.setenv("PACKED_PARCEL_WIDTH_MM", "150")
+    monkeypatch.setenv("PACKED_PARCEL_HEIGHT_MM", "40")
+    monkeypatch.setenv("PACKED_PARCEL_WEIGHT_GRAMS", "2000")
     get_settings.cache_clear()
     report = client.get("/api/v1/admin/readiness")
     assert report.status_code == 200
     body = report.json()
     assert body["checkout_enabled"] is False
     assert "fixture-secret-token" not in report.text
+    assert "1 Fixture Street" not in report.text
     items = {item["key"]: item for item in body["items"]}
     assert items["selling_price"]["ready"] is False
-    assert items["collection_address"]["ready"] is False
-    assert "not been recorded" in items["collection_address"]["detail"]
-    assert items["packed_parcel"]["ready"] is False
-    assert items["bobgo"]["ready"] is False
-    assert "sandbox token is configured" in items["bobgo"]["detail"]
-    assert "No successful sandbox rate test" in items["bobgo"]["detail"]
+    assert items["collection_address"]["ready"] is True
+    assert items["packed_parcel"]["ready"] is True
+    assert items["shiplogic_provider"]["ready"] is False
+    assert items["shiplogic_token"]["ready"] is True
+    assert "sandbox token is configured" in items["shiplogic_token"]["detail"]
+    assert items["shiplogic_quote"]["ready"] is False
+    assert "No successful sandbox rate test" in items["shiplogic_quote"]["detail"]
     assert items["payment"]["ready"] is False
     assert "business registration" in items["payment"]["detail"]
     reset_engine()

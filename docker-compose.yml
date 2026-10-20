@@ -18,5 +18,11 @@ services:
     volumes:
       - autonovent_pg:/var/lib/postgresql/data
 
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
 volumes:
   autonovent_pg:

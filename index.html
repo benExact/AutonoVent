@@ -32,9 +32,10 @@
             <li><a href="installation.html">Installation</a></li>
             <li><a href="faq.html">FAQs</a></li>
           </ul>
-          <a class="button button--primary nav-quote" href="#enquiry">Request a Quote</a>
+          <a class="button button--primary nav-quote" href="products.html">Shop</a>
         </nav>
         <div class="site-header__tools">
+          <a class="cart-link" href="cart.html">Cart <span data-cart-count>0</span></a>
           <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
             <span class="nav-toggle__icon" aria-hidden="true">
               <span class="nav-toggle__bar"></span>
@@ -48,8 +49,8 @@
     </header>
     <main class="site-main" id="main">
       <section class="hero" aria-labelledby="hero-heading">
-        <div class="hero-media">
-          <img src="assets/images/hero-dust-track.jpg" width="2200" height="1467" alt="A vehicle with a rear canopy drives away on a dusty dirt track. This lifestyle photograph does not show Autonovent or its installation.">
+        <div class="hero-media hero-media--installed">
+          <img src="assets/images/optimised/autonovent-dust-road.webp" srcset="assets/images/optimised/autonovent-dust-road-800.webp 800w, assets/images/optimised/autonovent-dust-road.webp 1254w" sizes="100vw" width="1254" height="1254" alt="A white canopy vehicle on a dusty gravel track. A small Autonovent is mounted on the canopy roof, ahead of a roof rack. The photograph shows the unit in use and is not a vehicle fitment list.">
         </div>
         <div class="hero-shade" aria-hidden="true"></div>
         <div class="container">
@@ -120,7 +121,7 @@
       </section>
 
       <section class="band band--forest reveal" data-reveal aria-labelledby="airflow-heading">
-        <div class="container split">
+        <div class="container">
           <div class="airflow-copy">
             <p class="eyebrow">How it works</p>
             <h2 id="airflow-heading" class="section-heading">Smart airflow. Automatic protection.</h2>
@@ -130,10 +131,6 @@
               <a class="button button--secondary" href="how-it-works.html">How It Works</a>
             </div>
           </div>
-          <figure class="diagram">
-            <img src="assets/images/how-it-works/drive.svg" width="720" height="440" alt="Side view of a bakkie with a canopy. Autonovent sits toward the front of the canopy roof with the front vent open, and arrows show air flowing into the canopy.">
-            <figcaption>Side view while driving. Illustration only, not a photograph or a vehicle fitment list.</figcaption>
-          </figure>
         </div>
       </section>
 
@@ -162,8 +159,8 @@
               <a class="button button--primary" href="product.html">Explore the Product</a>
             </div>
           </div>
-          <figure class="product-shot">
-            <img src="assets/images/optimised/autonovent-roof-three-quarter.webp" width="1121" height="807" alt="Autonovent on a white canopy roof, with the front intake slot facing forward and a small solar panel on top.">
+          <figure class="product-shot product-shot--field">
+            <img src="assets/images/optimised/autonovent-roof-sunset.webp" width="1376" height="1143" alt="Autonovent on a white canopy roof at sunset. The front intake slot and the small panel on top are visible, and the unit sits low between the roof ribs.">
           </figure>
         </div>
       </section>
@@ -171,47 +168,8 @@
       <section class="reveal" data-reveal aria-labelledby="closing-heading">
         <div class="container closing-inner">
           <h2 id="closing-heading" class="section-heading">Ready to leave the dust behind?</h2>
-          <p class="lede">Interested in Autonovent? Get in touch to discuss pricing, availability and your vehicle setup.</p>
-          <a class="button button--primary" href="#enquiry">Request a Quote</a>
-        </div>
-      </section>
-
-      <section class="enquiry" id="enquiry" aria-labelledby="enquiry-heading">
-        <div class="container enquiry-layout">
-          <div class="enquiry-copy">
-            <p class="eyebrow">Request a Quote</p>
-            <h2 id="enquiry-heading" class="section-heading">Talk to us about Autonovent.</h2>
-            <p class="lede">Interested in Autonovent? Get in touch to discuss pricing, availability and your vehicle setup.</p>
-          </div>
-          <form class="enquiry-form" data-enquiry-form action="#enquiry" method="post" novalidate>
-            <p class="notice" data-enquiry-note>Enquiry delivery is not connected yet. This preview does not send messages. A contact address needs to be configured before the public launch.</p>
-            <div class="field" data-field="name">
-              <label for="enquiry-name">Name</label>
-              <input id="enquiry-name" name="name" type="text" autocomplete="name" required>
-              <p class="field-error" id="enquiry-name-error" data-error hidden></p>
-            </div>
-            <div class="field" data-field="email">
-              <label for="enquiry-email">Email address</label>
-              <input id="enquiry-email" name="email" type="email" autocomplete="email" inputmode="email" required>
-              <p class="field-error" id="enquiry-email-error" data-error hidden></p>
-            </div>
-            <div class="field" data-field="phone">
-              <label for="enquiry-phone">Contact number <span class="visually-hidden">optional</span><span aria-hidden="true">(optional)</span></label>
-              <input id="enquiry-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel">
-              <p class="field-error" id="enquiry-phone-error" data-error hidden></p>
-            </div>
-            <div class="field" data-field="use">
-              <label for="enquiry-use">Quantity or intended use <span class="visually-hidden">optional</span><span aria-hidden="true">(optional)</span></label>
-              <input id="enquiry-use" name="use" type="text" autocomplete="off">
-            </div>
-            <div class="field" data-field="message">
-              <label for="enquiry-message">Message</label>
-              <textarea id="enquiry-message" name="message" required></textarea>
-              <p class="field-error" id="enquiry-message-error" data-error hidden></p>
-            </div>
-            <button class="button button--primary" type="submit">Request a Quote</button>
-            <p class="form-status" data-enquiry-status role="status" aria-live="polite"></p>
-          </form>
+          <p class="lede">Browse Autonovent in the shop and add it to your cart.</p>
+          <a class="button button--primary" href="products.html">Shop Now</a>
         </div>
       </section>
     </main>
@@ -234,9 +192,13 @@
           </ul>
         </nav>
         <div>
-          <p class="footer-heading">Enquire</p>
+          <p class="footer-heading">Shop</p>
           <ul class="footer-links">
-            <li><a href="#enquiry">Request a Quote</a></li>
+            <li><a href="products.html">Products</a></li>
+            <li><a href="cart.html">Cart</a></li>
+            <li><a href="terms.html">Terms and Conditions</a></li>
+            <li><a href="privacy.html">Privacy Notice</a></li>
+            <li><a href="shipping-and-returns.html">Shipping and returns</a></li>
           </ul>
           <p class="placeholder-note">Contact details have not been published yet.</p>
         </div>
@@ -245,7 +207,7 @@
         <p>&copy; <span data-copyright-year>2026</span> Autonovent</p>
       </div>
     </footer>
-    <script src="js/enquiry.js" defer></script>
+    <script src="js/cart.js" defer></script>
     <script src="js/main.js" defer></script>
   </body>
 </html>

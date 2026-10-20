@@ -9,10 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.models.order import Order, OrderStatusEvent
 from app.models.payment import Payment
 from app.models.product import Product
+from app.legal import TERMS_VERSION
+from app.notifications.service import queue_payment_confirmation, release_notifications
 from app.orders.service import (
     DeliveryAddress,
     IdempotencyConflict,
@@ -53,7 +55,11 @@ class CheckoutConflict(CheckoutError):
 
 
 class CheckoutNotFound(CheckoutError):
-    """The simulated order does not exist."""
+    """The order does not exist."""
+
+
+class CheckoutUnavailable(CheckoutError):
+    """A checkout provider could not be reached. No price or payment was invented."""
 
 
 @dataclass(frozen=True)
@@ -63,6 +69,7 @@ class QuotedLine:
     quantity: int
     unit_price_cents: int
     line_total_cents: int
+    price_is_demo: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,7 +98,7 @@ def quote_delivery(
     lines: list[OrderLine],
 ) -> QuoteResult:
     province = _province(delivery)
-    priced = _priced_lines(session, lines)
+    priced = _priced_lines(session, settings, lines)
     subtotal = sum(line.line_total_cents for line in priced)
     rates = _courier(settings).quote(region=province)
     return QuoteResult(currency="ZAR", subtotal_cents=subtotal, lines=priced, rates=rates)
@@ -109,12 +116,16 @@ def place_simulated_order(
     lines: list[OrderLine],
     service_code: str,
     expected_shipping_cents: int | None,
+    accept_terms: bool,
+    terms_version: str,
 ) -> CheckoutResult:
     province = _province(delivery)
     email = _email(customer_email)
-    phone = _phone(customer_phone)
+    phone = _phone(customer_phone, required=True)
     _require_text(customer_name, "customer name")
-    quoted = _priced_lines(session, lines)
+    if accept_terms is not True or terms_version.strip() != TERMS_VERSION:
+        raise CheckoutValidationError("Accept the current Terms and Conditions before payment.")
+    quoted = _priced_lines(session, settings, lines)
     selected = _selected_rate(settings, province, service_code)
     if expected_shipping_cents is not None and expected_shipping_cents != selected.shipping_cents:
         raise CheckoutValidationError("The delivery amount does not match the simulated quote.")
@@ -130,14 +141,19 @@ def place_simulated_order(
             city=delivery.city,
             region=province,
             postal_code=delivery.postal_code.strip(),
+            suburb=delivery.suburb,
             country="ZA",
         ),
-        lines=lines,
+        lines=[
+            OrderLine(product_id=item.product_id, quantity=item.quantity, unit_price_cents=item.unit_price_cents)
+            for item in quoted
+        ],
         shipping_cents=selected.shipping_cents,
         is_simulation=True,
         shipping_provider=selected.provider,
         shipping_service_code=selected.service_code,
         shipping_quote_reference=selected.quote_reference,
+        terms_version=TERMS_VERSION,
     )
     try:
         order = create_order(session, draft)
@@ -167,6 +183,8 @@ def record_simulated_payment(
             order = session.get(Order, order_id)
             if order is None or not order.is_simulation:
                 raise CheckoutNotFound("The simulated order does not exist.")
+            if order.terms_accepted is not True or not order.terms_version or order.terms_accepted_at is None:
+                raise CheckoutValidationError("Accept the current Terms and Conditions before payment.")
             existing = session.scalar(select(Payment).where(Payment.idempotency_key == key))
             if existing is not None:
                 _replay(existing, order, outcome)
@@ -197,6 +215,8 @@ def record_simulated_payment(
                             actor="simulated-payment",
                         )
                     )
+                    if status == "paid":
+                        queue_payment_confirmation(session, order, get_settings())
                 session.flush()
     except IntegrityError:
         session.rollback()
@@ -210,6 +230,7 @@ def record_simulated_payment(
         raise CheckoutNotFound("The simulated order does not exist.")
     if session.in_transaction():
         session.commit()
+    release_notifications(session)
     return _result(session, stored)
 
 
@@ -239,7 +260,17 @@ def _selected_rate(settings: Settings, province: str, service_code: str) -> Simu
     raise CheckoutValidationError("That simulated delivery option is not available.")
 
 
-def _priced_lines(session: Session, lines: list[OrderLine]) -> list[QuotedLine]:
+def applicable_price(product: Product, settings: Settings) -> tuple[int, bool] | None:
+    if not product.active:
+        return None
+    if product.unit_price_cents is not None:
+        return product.unit_price_cents, False
+    if settings.checkout_simulation_active and settings.checkout_simulation_demo_unit_price_cents is not None:
+        return settings.checkout_simulation_demo_unit_price_cents, True
+    return None
+
+
+def _priced_lines(session: Session, settings: Settings, lines: list[OrderLine]) -> list[QuotedLine]:
     if not lines:
         raise CheckoutValidationError("An order needs at least one item.")
     priced: list[QuotedLine] = []
@@ -247,17 +278,20 @@ def _priced_lines(session: Session, lines: list[OrderLine]) -> list[QuotedLine]:
         if not isinstance(line.quantity, int) or isinstance(line.quantity, bool) or line.quantity <= 0 or line.quantity > 20:
             raise CheckoutValidationError("Quantity must be a positive integer.")
         product = session.get(Product, line.product_id)
-        if product is None or not product.active or product.unit_price_cents is None:
+        resolved = applicable_price(product, settings) if product is not None else None
+        if product is None or resolved is None:
             raise CheckoutValidationError("An item is not available at a confirmed price.")
-        if product.unit_price_cents > 2_000_000_000 // line.quantity:
+        unit_price, price_is_demo = resolved
+        if unit_price > 2_000_000_000 // line.quantity:
             raise CheckoutValidationError("The line total is too large.")
         priced.append(
             QuotedLine(
                 product_id=product.id,
                 product_name=product.name,
                 quantity=line.quantity,
-                unit_price_cents=product.unit_price_cents,
-                line_total_cents=line.quantity * product.unit_price_cents,
+                unit_price_cents=unit_price,
+                line_total_cents=line.quantity * unit_price,
+                price_is_demo=price_is_demo,
             )
         )
     return priced
@@ -278,6 +312,7 @@ def _province(delivery: DeliveryAddress) -> str:
         raise CheckoutValidationError("Delivery is limited to South Africa.")
     _require_text(delivery.name, "delivery name")
     _require_text(delivery.line1, "delivery address")
+    _require_text(delivery.suburb, "suburb")
     _require_text(delivery.city, "delivery city")
     postal = delivery.postal_code.strip()
     if not re.fullmatch(r"[0-9]{4}", postal):
@@ -295,8 +330,10 @@ def _email(value: str) -> str:
     return email
 
 
-def _phone(value: str | None) -> str | None:
+def _phone(value: str | None, *, required: bool = False) -> str | None:
     if value is None or not value.strip():
+        if required:
+            raise CheckoutValidationError("A contact number is required.")
         return None
     phone = value.strip()
     if PHONE_PATTERN.fullmatch(phone) is None:
@@ -328,12 +365,14 @@ def address_from_parts(
     region: str,
     postal_code: str,
     line2: str | None,
+    suburb: str,
     country: str,
 ) -> DeliveryAddress:
     return DeliveryAddress(
         name=name,
         line1=line1,
         line2=line2,
+        suburb=suburb,
         city=city,
         region=region,
         postal_code=postal_code,

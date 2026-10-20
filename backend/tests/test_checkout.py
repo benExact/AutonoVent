@@ -33,6 +33,7 @@ def _cleanup(database_url: str) -> None:
         connection.execute(text("DELETE FROM order_items"))
         connection.execute(text("DELETE FROM payments"))
         connection.execute(text("DELETE FROM shipments"))
+        connection.execute(text("DELETE FROM email_notifications"))
         connection.execute(text("DELETE FROM orders"))
         connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
@@ -51,6 +52,7 @@ def _prepare(monkeypatch, database_url: str, *, enabled: bool = True) -> None:
     monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "true" if enabled else "false")
     monkeypatch.setenv("CHECKOUT_SIMULATION_RATES", RATES)
     monkeypatch.setenv("CHECKOUT_SIMULATION_REGION_EXTRAS", "Western Cape:2000")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
     get_settings.cache_clear()
     reset_engine()
     engine = create_engine(database_url)
@@ -62,6 +64,7 @@ def _prepare(monkeypatch, database_url: str, *, enabled: bool = True) -> None:
         connection.execute(text("DELETE FROM order_items"))
         connection.execute(text("DELETE FROM payments"))
         connection.execute(text("DELETE FROM shipments"))
+        connection.execute(text("DELETE FROM email_notifications"))
         connection.execute(text("DELETE FROM orders"))
         connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
@@ -86,6 +89,7 @@ def _address(region: str = "Gauteng", country: str = "ZA") -> dict:
         "name": "Fixture Customer",
         "line1": "1 Fixture Street",
         "line2": None,
+        "local_area": "Arcadia",
         "city": "Pretoria",
         "region": region,
         "postal_code": "0002",
@@ -142,26 +146,29 @@ def _order_payload(**overrides) -> dict:
         "lines": _lines(),
         "service_code": "standard",
         "expected_shipping_cents": 8500,
+        "accept_terms": True,
+        "terms_version": "v1.0-draft",
     }
     payload.update(overrides)
     return payload
 
 
-def test_simulated_quote_uses_configured_test_rates_and_not_bobgo(monkeypatch, isolated_database_url: str) -> None:
+def test_simulated_quote_uses_configured_test_rates_and_not_shiplogic(monkeypatch, isolated_database_url: str) -> None:
     _prepare(monkeypatch, isolated_database_url)
 
     def refuse_client(*args, **kwargs):
-        raise AssertionError("Bob Go HTTP was called")
+        raise AssertionError("ShipLogic HTTP was called")
 
-    monkeypatch.setattr("app.shipping.bobgo.httpx.Client", refuse_client)
+    monkeypatch.setattr("app.shipping.shiplogic.httpx.Client", refuse_client)
     response = _post("/api/v1/checkout/quotes", {"delivery": _address(), "lines": _lines()})
     assert response.status_code == 200
     body = response.json()
     assert body["simulation"] is True
     assert body["provider"] == "simulated-courier"
-    assert "not a Bob Go price" in body["label"]
+    assert "not a ShipLogic price" in body["label"]
     assert body["subtotal_cents"] == 150000
     assert body["lines"][0]["unit_price_cents"] == 150000
+    assert body["lines"][0]["price_is_demo"] is False
     assert [(quote["service_code"], quote["shipping_cents"], quote["total_cents"]) for quote in body["quotes"]] == [
         ("standard", 8500, 158500),
         ("express", 14500, 164500),
@@ -314,6 +321,8 @@ def test_owner_can_see_a_simulated_order_and_the_public_cannot(monkeypatch, isol
     assert body["shipping_provider"] == "simulated-courier"
     assert body["subtotal_cents"] == 150000
     assert body["total_cents"] == 158500
+    assert body["delivery_suburb"] == "Arcadia"
+    assert body["items"][0]["price_is_demo"] is False
     assert "notification" not in detail.text
     internal = create_engine(isolated_database_url)
     with Session(internal, expire_on_commit=False) as session:
@@ -355,7 +364,153 @@ def test_production_and_disabled_simulation_reject_checkout(monkeypatch, isolate
     with pytest.raises(ValidationError):
         get_settings()
     monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "100000")
+    get_settings.cache_clear()
+    with pytest.raises(ValidationError):
+        get_settings()
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
+    monkeypatch.setenv("EMAIL_TRANSPORT", "smtp")
+    monkeypatch.setenv("SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("EMAIL_FROM", "Autonovent <orders@example.com>")
     get_settings.cache_clear()
     assert client.get("/api/v1/checkout/status").json()["simulation_enabled"] is False
     assert _post("/api/v1/checkout/orders", _order_payload()).status_code == 404
     get_settings.cache_clear()
+
+
+def test_demo_price_is_snapshotted_without_changing_the_product(monkeypatch, isolated_database_url: str) -> None:
+    _prepare(monkeypatch, isolated_database_url)
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "100000")
+    get_settings.cache_clear()
+    unpriced_id = uuid.UUID("00000000-0000-4000-8000-000000000032")
+    engine = create_engine(isolated_database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO products (id, slug, name, description, sku, unit_price_cents, currency, active)
+                VALUES
+                  (:unpriced, 'fixture-unpriced', 'Unpriced fixture', 'Automated test row. Not a commercial product.', NULL, NULL, 'ZAR', true),
+                  (:inactive, 'fixture-inactive', 'Inactive fixture', 'Automated test row. Not a commercial product.', NULL, NULL, 'ZAR', false)
+                """
+            ),
+            {"unpriced": unpriced_id, "inactive": uuid.uuid4()},
+        )
+    engine.dispose()
+
+    listed = client.get("/api/v1/products")
+    assert listed.status_code == 200
+    rows = {item["slug"]: item for item in listed.json()["products"]}
+    assert "fixture-inactive" not in rows
+    assert rows["fixture-unpriced"]["price_is_demo"] is True
+    assert rows["fixture-unpriced"]["unit_price_cents"] == 100000
+    assert rows["fixture-checkout"]["price_is_demo"] is False
+    assert rows["fixture-checkout"]["unit_price_cents"] == 150000
+
+    created = _post(
+        "/api/v1/checkout/orders",
+        _order_payload(
+            idempotency_key="fixture-checkout-demo-price1",
+            lines=[{"product_id": str(unpriced_id), "quantity": 2}],
+        ),
+    )
+    assert created.status_code == 200
+    assert created.json()["subtotal_cents"] == 200000
+    assert created.json()["shipping_cents"] == 8500
+    assert created.json()["total_cents"] == 208500
+    tampered = _post(
+        "/api/v1/checkout/orders",
+        _order_payload(
+            idempotency_key="fixture-checkout-demo-price2",
+            lines=[{"product_id": str(unpriced_id), "quantity": 1, "unit_price_cents": 1}],
+        ),
+    )
+    assert tampered.status_code == 422
+
+    engine = create_engine(isolated_database_url)
+    with engine.begin() as connection:
+        stored_price = connection.execute(
+            text("SELECT unit_price_cents FROM products WHERE id = :id"),
+            {"id": unpriced_id},
+        ).scalar()
+        snapshot = connection.execute(
+            text("SELECT unit_price_cents, price_is_demo FROM order_items WHERE product_id = :id"),
+            {"id": unpriced_id},
+        ).one()
+    engine.dispose()
+    assert stored_price is None
+    assert snapshot[0] == 100000
+    assert snapshot[1] is True
+
+
+def test_terms_must_be_accepted_and_are_stored_on_the_order(monkeypatch, isolated_database_url: str) -> None:
+    _prepare(monkeypatch, isolated_database_url)
+    missing = _order_payload()
+    missing.pop("accept_terms")
+    assert _post("/api/v1/checkout/orders", missing).status_code == 422
+    assert _post("/api/v1/checkout/orders", _order_payload(accept_terms=False)).status_code == 422
+    assert _post("/api/v1/checkout/orders", _order_payload(terms_version="tampered")).status_code == 422
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(Order)) == 0
+    engine.dispose()
+
+    first = _post("/api/v1/checkout/orders", _order_payload())
+    second = _post("/api/v1/checkout/orders", _order_payload())
+    assert first.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        orders = session.scalars(select(Order)).all()
+        assert len(orders) == 1
+        order = orders[0]
+        assert order.terms_accepted is True
+        assert order.terms_version == "v1.0-draft"
+        assert order.terms_accepted_at is not None
+        assert order.terms_accepted_at.tzinfo is not None
+        accepted_at = order.terms_accepted_at
+        order_id = order.id
+    engine.dispose()
+    repeated = _post("/api/v1/checkout/orders", _order_payload())
+    assert repeated.json()["id"] == str(order_id)
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        stored = session.get(Order, order_id)
+        assert stored is not None
+        assert stored.terms_accepted_at == accepted_at
+    engine.dispose()
+
+    with Session(create_engine(isolated_database_url), expire_on_commit=False) as session:
+        plain = create_order(
+            session,
+            OrderDraft(
+                idempotency_key="fixture-checkout-no-terms1",
+                customer_name="Fixture Customer",
+                customer_email="fixture@example.com",
+                customer_phone="0820000000",
+                delivery=DeliveryAddress(
+                    name="Fixture Customer",
+                    line1="1 Fixture Street",
+                    line2=None,
+                    city="Pretoria",
+                    region="Gauteng",
+                    postal_code="0002",
+                    suburb="Arcadia",
+                    country="ZA",
+                ),
+                lines=[OrderLine(product_id=PRICED_ID, quantity=1)],
+                shipping_cents=8500,
+                is_simulation=True,
+                shipping_provider="simulated-courier",
+                shipping_service_code="standard",
+                shipping_quote_reference="sim-standard-8500",
+            ),
+        )
+        plain_id = plain.id
+    refused = _post(
+        f"/api/v1/checkout/orders/{plain_id}/payment",
+        {"outcome": "success", "idempotency_key": "fixture-payment-no-terms1"},
+    )
+    assert refused.status_code == 422
+    detail = client.get("/api/v1/orders/" + first.json()["id"])
+    assert detail.status_code == 401

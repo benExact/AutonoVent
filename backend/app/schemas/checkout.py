@@ -18,6 +18,7 @@ class CheckoutAddressInput(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     line1: str = Field(min_length=1, max_length=200)
     line2: str | None = Field(default=None, max_length=200)
+    local_area: str = Field(min_length=1, max_length=120)
     city: str = Field(min_length=1, max_length=120)
     region: str = Field(min_length=1, max_length=120)
     postal_code: str = Field(min_length=4, max_length=4, pattern=r"^[0-9]{4}$")
@@ -37,11 +38,13 @@ class OrderRequest(BaseModel):
     idempotency_key: str = Field(min_length=16, max_length=80)
     customer_name: str = Field(min_length=1, max_length=160)
     customer_email: str = Field(min_length=3, max_length=254)
-    customer_phone: str | None = Field(default=None, max_length=40)
+    customer_phone: str = Field(min_length=6, max_length=40)
     delivery: CheckoutAddressInput
     lines: list[CheckoutLineInput] = Field(min_length=1, max_length=20)
-    service_code: str = Field(min_length=1, max_length=32)
+    service_code: str = Field(min_length=1, max_length=80)
     expected_shipping_cents: int | None = Field(default=None, ge=0)
+    accept_terms: bool
+    terms_version: str = Field(min_length=1, max_length=40)
 
 
 class PaymentRequest(BaseModel):
@@ -57,6 +60,7 @@ class QuotedLineView(BaseModel):
     quantity: int
     unit_price_cents: int
     line_total_cents: int
+    price_is_demo: bool = False
 
 
 class QuoteOptionView(BaseModel):
@@ -81,6 +85,14 @@ class QuoteResponse(BaseModel):
 
 class CheckoutStatus(BaseModel):
     simulation_enabled: bool
+    checkout_mode: str = "unavailable"
+    courier_provider: str = ""
+    payment_provider: str = ""
+
+
+class PayfastSessionView(BaseModel):
+    action: str
+    fields: dict[str, str]
 
 
 class CheckoutOrderView(BaseModel):

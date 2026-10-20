@@ -198,6 +198,10 @@ def test_secure_cookie_in_production(monkeypatch, isolated_database_url: str) ->
     _use_database(monkeypatch, isolated_database_url)
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
+    monkeypatch.setenv("EMAIL_TRANSPORT", "smtp")
+    monkeypatch.setenv("SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("EMAIL_FROM", "Autonovent <orders@example.com>")
     get_settings.cache_clear()
     engine = create_engine(isolated_database_url)
     with Session(engine, expire_on_commit=False) as session:

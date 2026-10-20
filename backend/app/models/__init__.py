@@ -1,6 +1,7 @@
 """Import models so Alembic can see the metadata."""
 
 from app.models.admin import AdminUser
+from app.models.email_notification import EmailNotification
 from app.models.audit import ProductAuditEvent
 from app.models.auth import AdminSession, LoginAttempt
 from app.models.order import Order, OrderItem, OrderStatusEvent
@@ -10,6 +11,7 @@ from app.models.shipment import Shipment
 
 __all__ = [
     "AdminUser",
+    "EmailNotification",
     "AdminSession",
     "LoginAttempt",
     "Order",

@@ -19,11 +19,15 @@ PUBLIC_FIELDS = {
     "unit_price_cents",
     "currency",
     "active",
+    "price_is_demo",
 }
 
 
 def _use_database(monkeypatch, database_url: str) -> None:
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
     get_settings.cache_clear()
     reset_engine()
 
@@ -77,6 +81,7 @@ def test_catalogue_returns_only_priced_active_products(monkeypatch, isolated_dat
     assert isinstance(product["unit_price_cents"], int)
     assert product["currency"] == "ZAR"
     assert product["active"] is True
+    assert product["price_is_demo"] is False
 
     engine = create_engine(isolated_database_url)
     with engine.begin() as connection:

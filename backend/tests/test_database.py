@@ -27,12 +27,13 @@ def test_isolated_database_has_migrated_tables(isolated_database_url: str) -> No
         ).scalars().all()
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
     engine.dispose()
-    assert revision == "20261015_0004"
+    assert revision == "20261020_0009"
     assert tables == [
         "admin_sessions",
         "admin_users",
         "alembic_version",
         "auth_login_attempts",
+        "email_notifications",
         "order_items",
         "order_status_events",
         "orders",
