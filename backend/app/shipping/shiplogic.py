@@ -8,6 +8,7 @@ rates only. It does not create shipments, labels, or tracking numbers.
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -71,6 +72,9 @@ class ShippingRate:
     service_name: str
     total_price_cents: int
     rate_id: str
+    collection_cut_off: str | None = None
+    delivery_from: str | None = None
+    delivery_to: str | None = None
 
 
 @dataclass(frozen=True)
@@ -208,10 +212,15 @@ def _quote_from_response(response: httpx.Response) -> ShippingQuote:
         raise ShipLogicInvalidResponseError("The ShipLogic sandbox returned invalid JSON.") from None
     if not isinstance(body, Mapping) or not isinstance(body.get("rates"), list):
         raise ShipLogicInvalidResponseError("The ShipLogic sandbox returned an unexpected rate response.")
-    return ShippingQuote(rates=[_rate_from_object(item) for item in body["rates"]])
+    rates = []
+    for item in body["rates"]:
+        rate = _rate_from_object(item)
+        if rate is not None:
+            rates.append(rate)
+    return ShippingQuote(rates=rates)
 
 
-def _rate_from_object(node: Any) -> ShippingRate:
+def _rate_from_object(node: Any) -> ShippingRate | None:
     if not isinstance(node, Mapping):
         raise ShipLogicInvalidResponseError("The ShipLogic sandbox returned an incomplete rate.")
     service = node.get("service_level")
@@ -231,10 +240,34 @@ def _rate_from_object(node: Any) -> ShippingRate:
         raise ShipLogicInvalidResponseError("The ShipLogic sandbox returned an incomplete rate.")
     service_name = name.strip() if isinstance(name, str) and name.strip() else code.strip()
     cents = int((Decimal(str(price)) * Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    cut_off = _timestamp(service.get("collection_cut_off_time"))
+    delivery_from = _timestamp(service.get("delivery_date_from"))
+    delivery_to = _timestamp(service.get("delivery_date_to"))
+    if _same_day_window(delivery_from, delivery_to) and cut_off is not None and cut_off <= datetime.now(timezone.utc):
+        return None
     return ShippingRate(
         provider_slug=PROVIDER,
         service_level_code=code.strip(),
         service_name=service_name,
         total_price_cents=cents,
         rate_id=str(service_id),
+        collection_cut_off=service.get("collection_cut_off_time") if cut_off is not None else None,
+        delivery_from=service.get("delivery_date_from") if delivery_from is not None else None,
+        delivery_to=service.get("delivery_date_to") if delivery_to is not None else None,
     )
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _same_day_window(start: datetime | None, end: datetime | None) -> bool:
+    return start is not None and end is not None and start.date() == end.date()

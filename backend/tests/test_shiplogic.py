@@ -101,6 +101,67 @@ def test_valid_rates_use_the_documented_sandbox_contract() -> None:
     assert TOKEN not in repr(client(handler))
 
 
+def test_same_day_service_is_omitted_after_its_collection_cut_off() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_rates(
+                {
+                    "rate": 86.25,
+                    "service_level": {
+                        "id": 212572,
+                        "code": "LSF",
+                        "name": "Local Sameday Flyer",
+                        "collection_cut_off_time": "2020-01-01T10:30:00+02:00",
+                        "delivery_date_from": "2020-01-01T09:00:00+02:00",
+                        "delivery_date_to": "2020-01-01T15:00:00+02:00",
+                    },
+                },
+                {
+                    "rate": 95,
+                    "rate_excluding_vat": 82.61,
+                    "service_level": {
+                        "id": 212570,
+                        "code": "ECO",
+                        "name": "Economy",
+                        "collection_cut_off_time": "2020-01-01T15:00:00+02:00",
+                        "delivery_date_from": "2020-01-03T08:00:00+02:00",
+                        "delivery_date_to": "2020-01-06T17:00:00+02:00",
+                    },
+                },
+            ),
+        )
+
+    quote = client(handler).quote(collection=address(), delivery=address(), parcels=[parcel()])
+    assert [rate.service_level_code for rate in quote.rates] == ["ECO"]
+    assert quote.rates[0].total_price_cents == 9500
+    assert quote.rates[0].collection_cut_off == "2020-01-01T15:00:00+02:00"
+
+
+def test_future_same_day_cut_off_stays_available() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_rates(
+                {
+                    "rate": 86.25,
+                    "service_level": {
+                        "id": 9,
+                        "code": "LSF",
+                        "name": "Local Sameday Flyer",
+                        "collection_cut_off_time": "2099-01-01T10:30:00+02:00",
+                        "delivery_date_from": "2099-01-01T09:00:00+02:00",
+                        "delivery_date_to": "2099-01-01T15:00:00+02:00",
+                    },
+                }
+            ),
+        )
+
+    quote = client(handler).quote(collection=address(), delivery=address(), parcels=[parcel()])
+    assert quote.rates[0].service_level_code == "LSF"
+    assert quote.rates[0].total_price_cents == 8625
+
+
 def test_empty_rates_do_not_invent_a_price() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_rates())

@@ -272,8 +272,45 @@ def test_itn_confirms_payment_once_and_rejects_bad_notifications(monkeypatch, is
         return client.post("/api/v1/payments/payfast/itn", data=payload, headers={"X-Forwarded-For": "197.97.145.144"})
 
     monkeypatch.setattr("app.api.v1.checkout.source_ip", lambda peer, header, settings: "197.97.145.144")
+    unsigned = client.post(
+        "/api/v1/payments/payfast/itn",
+        data={"m_payment_id": order["order_number"], "payment_status": "COMPLETE", "amount_gross": "1585.00", "signature": "not-a-signature"},
+    )
+    assert unsigned.status_code == 200
+    assert unsigned.json()["status"] == "ignored"
+    wrong_merchant = post_itn("1585.00", "COMPLETE", reference="1089247", merchant="99999999")
+    assert wrong_merchant.status_code == 200
+    assert wrong_merchant.json()["status"] == "ignored"
+    monkeypatch.setattr("app.checkout.sandbox.validate_with_payfast", lambda *args, **kwargs: False)
+    unconfirmed = post_itn("1585.00", "COMPLETE", reference="1089248")
+    assert unconfirmed.status_code == 503
+    monkeypatch.setattr("app.checkout.sandbox.validate_with_payfast", lambda *args, **kwargs: True)
+    unknown = client.post(
+        "/api/v1/payments/payfast/itn",
+        data={
+            "m_payment_id": "AV-DOES-NOT-EXIST",
+            "pf_payment_id": "1089246",
+            "payment_status": "COMPLETE",
+            "amount_gross": "1585.00",
+            "merchant_id": "10000100",
+            "signature": hashlib.md5(
+                (itn_parameter_string([
+                    ("m_payment_id", "AV-DOES-NOT-EXIST"),
+                    ("pf_payment_id", "1089246"),
+                    ("payment_status", "COMPLETE"),
+                    ("amount_gross", "1585.00"),
+                    ("merchant_id", "10000100"),
+                ]) + "&passphrase=" + payfast_encode("sandbox-pass")).encode()
+            ).hexdigest(),
+        },
+    )
+    assert unknown.status_code == 200
+    assert unknown.json()["status"] == "ignored"
     wrong_amount = post_itn("1.00", "COMPLETE")
-    assert wrong_amount.status_code == 400
+    assert wrong_amount.status_code == 200
+    assert wrong_amount.json()["status"] == "ignored"
+    failed = post_itn("1585.00", "FAILED", reference="1089249")
+    assert failed.status_code == 200
     cancelled = post_itn("1585.00", "CANCELLED", reference="1089251")
     assert cancelled.status_code == 200
     pending = post_itn("1585.00", "PENDING", reference="1089252")
@@ -289,6 +326,9 @@ def test_itn_confirms_payment_once_and_rejects_bad_notifications(monkeypatch, is
         emails = session.scalars(select(EmailNotification).where(EmailNotification.order_id == stored.id)).all()
         shipments = session.scalars(select(Shipment).where(Shipment.order_id == stored.id)).all()
         assert stored.payment_status == "paid"
+        failed_payment = session.scalar(select(Payment).where(Payment.provider_reference == "1089249"))
+        assert failed_payment is not None
+        assert failed_payment.status == "failed"
         assert stored.total_cents == 158500
         assert stored.fulfilment_status == "unfulfilled"
         assert len(emails) == 1

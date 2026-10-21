@@ -3,6 +3,7 @@
 import hashlib
 
 import httpx
+import pytest
 
 from app.payments.payfast import (
     SANDBOX_PROCESS_URL,
@@ -87,6 +88,66 @@ def test_payfast_source_networks() -> None:
     assert ip_is_payfast("144.126.193.139")
     assert not ip_is_payfast("127.0.0.1")
     assert not ip_is_payfast("8.8.8.8")
+
+
+def test_live_payfast_and_a_non_sandbox_host_are_rejected() -> None:
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, app_env="development", payfast_mode="live", payment_provider="", courier_provider="")
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            email_transport="smtp",
+            smtp_host="smtp.example.test",
+            email_from="orders@example.test",
+            checkout_simulation_enabled=False,
+            courier_provider="shiplogic",
+            payment_provider="payfast",
+            payfast_mode="sandbox",
+            shiplogic_mode="sandbox",
+            shiplogic_api_token="sandbox-token",
+        )
+
+
+def test_missing_sandbox_credentials_do_not_invent_a_payment_form() -> None:
+    from app.payments.payfast import PayfastConfigurationError
+
+    with pytest.raises(PayfastConfigurationError):
+        checkout_fields(
+            merchant_id="",
+            merchant_key="",
+            passphrase="",
+            return_url="http://127.0.0.1:8765/checkout.html?payment=return",
+            cancel_url="http://127.0.0.1:8765/checkout.html?payment=cancel",
+            notify_url="https://example.test/api/v1/payments/payfast/itn",
+            name_first="Ada",
+            name_last="Lovelace",
+            email_address="ada@example.com",
+            cell_number="0820000000",
+            payment_id="AV-TEST",
+            amount_cents=158500,
+            item_name="AV-TEST",
+        )
+    with pytest.raises(PayfastConfigurationError):
+        checkout_fields(
+            merchant_id="10000100",
+            merchant_key="46f0cd694581a",
+            passphrase="",
+            return_url="http://127.0.0.1:8765/checkout.html?payment=return",
+            cancel_url="http://127.0.0.1:8765/checkout.html?payment=cancel",
+            notify_url="http://127.0.0.1:8001/api/v1/payments/payfast/itn",
+            name_first="Ada",
+            name_last="Lovelace",
+            email_address="ada@example.com",
+            cell_number="0820000000",
+            payment_id="AV-TEST",
+            amount_cents=158500,
+            item_name="AV-TEST",
+        )
 
 
 def test_server_validation_accepts_only_valid_from_sandbox() -> None:

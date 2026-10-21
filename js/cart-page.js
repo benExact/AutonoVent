@@ -39,9 +39,7 @@
       const row = document.createElement("li");
       const name = document.createElement("h2");
       name.textContent = product ? product.name : "This product is not available for purchase.";
-      const quantity = document.createElement("p");
-      quantity.textContent = "Quantity " + line.quantity;
-      row.append(name, quantity);
+      row.append(name);
       if (product && Number.isInteger(product.unit_price_cents)) {
         subtotal += product.unit_price_cents * line.quantity;
         const price = document.createElement("p");
@@ -59,35 +57,7 @@
         missing.textContent = "This item cannot be purchased. Remove it to continue.";
         row.append(missing);
       }
-      const controls = document.createElement("div");
-      controls.className = "button-row";
-      const decrease = document.createElement("button");
-      decrease.type = "button";
-      decrease.className = "button button--secondary";
-      decrease.textContent = "Decrease";
-      decrease.addEventListener("click", () => {
-        window.AutonoventCart.setQuantity(line.productId, line.quantity - 1);
-        render();
-      });
-      const increase = document.createElement("button");
-      increase.type = "button";
-      increase.className = "button button--secondary";
-      increase.textContent = "Increase";
-      increase.disabled = line.quantity >= 20;
-      increase.addEventListener("click", () => {
-        window.AutonoventCart.setQuantity(line.productId, line.quantity + 1);
-        render();
-      });
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "button button--secondary";
-      remove.textContent = "Remove";
-      remove.addEventListener("click", () => {
-        window.AutonoventCart.remove(line.productId);
-        render();
-      });
-      controls.append(decrease, increase, remove);
-      row.append(controls);
+      row.append(window.AutonoventCart.lineControls(line.productId, line.quantity, render));
       list.append(row);
     });
     host.append(list);

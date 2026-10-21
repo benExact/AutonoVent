@@ -2,6 +2,7 @@
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -73,7 +74,7 @@ def quote_sandbox(session: Session, settings: Settings, *, delivery: DeliveryAdd
     priced = _priced_lines(session, settings, lines)
     subtotal = sum(line.line_total_cents for line in priced)
     options = _fresh_rates(settings, delivery, province, priced, subtotal)
-    return QuoteResult(currency="ZAR", subtotal_cents=subtotal, lines=priced, rates=options, label=SANDBOX_LABEL)
+    return QuoteResult(currency="ZAR", subtotal_cents=subtotal, lines=priced, rates=options, label=quote_label(settings))
 
 
 def place_sandbox_order(
@@ -291,7 +292,10 @@ def _fresh_rates(settings: Settings, delivery: DeliveryAddress, province: str, p
                 shipping_cents=rate.total_price_cents,
                 quote_reference=reference,
                 provider=SHIPLOGIC_PROVIDER,
-                label=SANDBOX_LABEL,
+                label=_service_label(rate),
+                collection_cut_off=rate.collection_cut_off,
+                delivery_from=rate.delivery_from,
+                delivery_to=rate.delivery_to,
             )
         )
     if not options:
@@ -308,6 +312,46 @@ def _match_rate(settings, delivery, province, priced, subtotal, service_code: st
             raise CheckoutValidationError("The delivery amount does not match the ShipLogic sandbox quote.")
         return rate
     raise CheckoutValidationError("That ShipLogic sandbox delivery option is no longer available.")
+
+
+def shiplogic_quotes_configured(settings: Settings) -> bool:
+    return settings.shiplogic_mode == "sandbox" and bool(settings.shiplogic_api_token.strip())
+
+
+def quote_label(settings: Settings) -> str:
+    return SANDBOX_LABEL + " The delivery price includes VAT. " + parcel_notice(settings)
+
+
+def parcel_notice(settings: Settings) -> str:
+    length = settings.packed_parcel_length_mm
+    width = settings.packed_parcel_width_mm
+    height = settings.packed_parcel_height_mm
+    weight = settings.packed_parcel_weight_grams
+    if None in {length, width, height, weight}:
+        return "Packed parcel measurements have not been confirmed."
+    kilograms = weight / 1000
+    weight_text = str(int(kilograms)) if kilograms.is_integer() else f"{kilograms:g}"
+    return (
+        f"The quote uses the configured parcel of {length} × {width} × {height} mm and {weight_text} kg. "
+        "These figures are product specifications and have not been confirmed as packed-parcel measurements."
+    )
+
+
+def _service_label(rate) -> str:
+    parts = [SANDBOX_LABEL, "VAT-inclusive price."]
+    if rate.collection_cut_off:
+        parts.append("Collection cut-off " + _shown_time(rate.collection_cut_off) + ".")
+    if rate.delivery_from and rate.delivery_to:
+        parts.append("Delivery window " + _shown_time(rate.delivery_from) + " to " + _shown_time(rate.delivery_to) + ".")
+    return " ".join(parts)
+
+
+def _shown_time(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return parsed.strftime("%d %b %Y, %H:%M")
 
 
 def _collection(settings: Settings) -> SouthAfricanAddress:
@@ -361,6 +405,8 @@ def _itn_status(value: str) -> str | None:
         return "paid"
     if cleaned == "CANCELLED":
         return "cancelled"
+    if cleaned == "FAILED":
+        return "failed"
     return None
 
 
@@ -390,7 +436,7 @@ def _store_confirmed(session: Session, order: Order, status: str, reference: str
             if status == "paid" and current.payment_status == "paid":
                 return
             previous = current.payment_status
-            payment = existing or session.scalar(select(Payment).where(Payment.idempotency_key == f"payfast-start:{current.id}"))
+            payment = existing or _unclaimed_start(session, current.id)
             if payment is None:
                 payment = Payment(
                     order_id=current.id,
@@ -426,10 +472,17 @@ def _store_confirmed(session: Session, order: Order, status: str, reference: str
         session.commit()
 
 
+def _unclaimed_start(session: Session, order_id: uuid.UUID) -> Payment | None:
+    payment = session.scalar(select(Payment).where(Payment.idempotency_key == f"payfast-start:{order_id}"))
+    if payment is None or payment.provider_reference:
+        return None
+    return payment
+
+
 def _upsert_payment(session: Session, order: Order, status: str, reference: str, data: dict[str, str]) -> None:
     payment = session.scalar(select(Payment).where(Payment.provider == PAYFAST_PROVIDER, Payment.provider_reference == reference))
     if payment is None:
-        payment = session.scalar(select(Payment).where(Payment.idempotency_key == f"payfast-start:{order.id}"))
+        payment = _unclaimed_start(session, order.id)
     if payment is None:
         session.add(
             Payment(

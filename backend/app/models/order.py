@@ -41,7 +41,7 @@ class Order(Base):
             name="ck_orders_idempotency_pair",
         ),
         CheckConstraint(
-            "(is_simulation = false AND shipping_provider IS NULL AND shipping_service_code IS NULL AND shipping_quote_reference IS NULL) OR (is_simulation = true AND shipping_provider = 'simulated-courier' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = false AND shipping_provider = 'bobgo' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = false AND shipping_provider = 'shiplogic' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL)",
+            "(is_simulation = false AND shipping_provider IS NULL AND shipping_service_code IS NULL AND shipping_quote_reference IS NULL) OR (is_simulation = true AND shipping_provider = 'simulated-courier' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = true AND shipping_provider = 'shiplogic' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = false AND shipping_provider = 'bobgo' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL) OR (is_simulation = false AND shipping_provider = 'shiplogic' AND shipping_service_code IS NOT NULL AND shipping_quote_reference IS NOT NULL)",
             name="ck_orders_simulation_quote",
         ),
         CheckConstraint(

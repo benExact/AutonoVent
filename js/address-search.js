@@ -92,6 +92,7 @@
         const control = form.elements[key];
         if (control && Object.prototype.hasOwnProperty.call(values, key)) {
           control.value = values[key];
+          control.dispatchEvent(new Event("input", { bubbles: true }));
         }
       });
     }

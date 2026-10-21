@@ -78,12 +78,73 @@
     return lines;
   }
 
+  function strokeIcon(paths) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    paths.forEach((definition) => {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", definition);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", "1.75");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.append(path);
+    });
+    return svg;
+  }
+
+  function iconButton(label, paths, className) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className || "icon-button";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.append(strokeIcon(paths));
+    return button;
+  }
+
+  function lineControls(productId, quantity, onChange) {
+    const wrap = document.createElement("div");
+    wrap.className = "qty-control";
+    const stepper = document.createElement("div");
+    stepper.className = "qty-stepper";
+    stepper.setAttribute("role", "group");
+    stepper.setAttribute("aria-label", "Quantity");
+    const decrease = iconButton("Decrease quantity", ["M5 12h14"]);
+    decrease.disabled = quantity <= 1;
+    decrease.addEventListener("click", () => {
+      setQuantity(productId, quantity - 1);
+      onChange();
+    });
+    const value = document.createElement("span");
+    value.className = "qty-value";
+    value.textContent = String(quantity);
+    const increase = iconButton("Increase quantity", ["M12 5v14", "M5 12h14"]);
+    increase.disabled = quantity >= 20;
+    increase.addEventListener("click", () => {
+      setQuantity(productId, quantity + 1);
+      onChange();
+    });
+    const removeItem = iconButton("Remove item", ["M4 7h16", "M10 11v6", "M14 11v6", "M9 7V5h6v2", "M7 7l1 12h8l1-12"], "icon-button qty-remove");
+    removeItem.addEventListener("click", () => {
+      remove(productId);
+      onChange();
+    });
+    stepper.append(decrease, value, increase);
+    wrap.append(stepper, removeItem);
+    return wrap;
+  }
+
   window.AutonoventCart = {
     read: read,
     write: write,
     add: add,
     setQuantity: setQuantity,
     remove: remove,
+    lineControls: lineControls,
     count: count,
     updateCounts: updateCounts,
   };

@@ -113,11 +113,15 @@ def checkout_status() -> CheckoutStatus:
         settings = get_settings()
     except ValidationError:
         return CheckoutStatus(simulation_enabled=False, checkout_mode="unavailable")
+    from app.checkout.sandbox import shiplogic_quotes_configured
+
+    shipping_quotes = "shiplogic" if settings.checkout_mode == "sandbox" or (settings.checkout_simulation_active and shiplogic_quotes_configured(settings)) else ("simulated" if settings.checkout_simulation_active else "")
     return CheckoutStatus(
         simulation_enabled=settings.checkout_simulation_active,
         checkout_mode=settings.checkout_mode,
         courier_provider=settings.courier_provider or ("simulated" if settings.checkout_simulation_active else ""),
         payment_provider=settings.payment_provider or ("simulated" if settings.checkout_simulation_active else ""),
+        shipping_quotes=shipping_quotes,
     )
 
 
@@ -141,9 +145,10 @@ def checkout_quotes(
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
     sandbox = settings.checkout_mode == "sandbox"
+    shiplogic = sandbox or any(rate.provider == "shiplogic" for rate in quoted.rates)
     return QuoteResponse(
         simulation=not sandbox,
-        provider="shiplogic" if sandbox else SIMULATED_PROVIDER,
+        provider="shiplogic" if shiplogic else SIMULATED_PROVIDER,
         label=quoted.label,
         currency=quoted.currency,
         subtotal_cents=quoted.subtotal_cents,
@@ -167,6 +172,9 @@ def checkout_quotes(
                 total_cents=quoted.subtotal_cents + rate.shipping_cents,
                 quote_reference=rate.quote_reference,
                 label=rate.label,
+                collection_cut_off=rate.collection_cut_off,
+                delivery_from=rate.delivery_from,
+                delivery_to=rate.delivery_to,
             )
             for rate in quoted.rates
         ],
@@ -260,8 +268,8 @@ async def payfast_itn(request: Request, session: Session = Depends(get_session))
         apply_payfast_itn(session, settings, pairs=pairs, source_ip=source_ip(peer, forwarded, settings))
     except CheckoutUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
-    except CheckoutError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except CheckoutError:
+        return {"status": "ignored"}
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail="The payment notification could not be recorded.") from None
     return {"status": "ok"}

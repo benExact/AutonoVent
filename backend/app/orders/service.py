@@ -352,6 +352,12 @@ def _stored_quote(draft: OrderDraft) -> tuple[str | None, str | None, str | None
     provider = draft.shipping_provider.strip() if draft.shipping_provider else None
     service_code = draft.shipping_service_code.strip() if draft.shipping_service_code else None
     reference = draft.shipping_quote_reference.strip() if draft.shipping_quote_reference else None
+    if draft.is_simulation and provider == "shiplogic":
+        if not service_code or not reference:
+            raise OrderValidationError("A simulated order needs the selected ShipLogic sandbox service and quote.")
+        if len(service_code) > 80 or len(reference) > 120:
+            raise OrderValidationError("The courier service details are too long to store.")
+        return provider, service_code, reference
     if draft.is_simulation:
         if provider != "simulated-courier" or not service_code or not reference:
             raise OrderValidationError("A simulated order needs its simulated delivery quote.")

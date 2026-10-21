@@ -71,6 +71,9 @@ class QuoteOptionView(BaseModel):
     total_cents: int
     quote_reference: str
     label: str
+    collection_cut_off: str | None = None
+    delivery_from: str | None = None
+    delivery_to: str | None = None
 
 
 class QuoteResponse(BaseModel):
@@ -88,6 +91,7 @@ class CheckoutStatus(BaseModel):
     checkout_mode: str = "unavailable"
     courier_provider: str = ""
     payment_provider: str = ""
+    shipping_quotes: str = ""
 
 
 class PayfastSessionView(BaseModel):

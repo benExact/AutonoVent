@@ -100,6 +100,17 @@ def quote_delivery(
     province = _province(delivery)
     priced = _priced_lines(session, settings, lines)
     subtotal = sum(line.line_total_cents for line in priced)
+    if _uses_shiplogic_quotes(settings):
+        from app.checkout.sandbox import _fresh_rates, quote_label
+
+        rates = _fresh_rates(settings, delivery, province, priced, subtotal)
+        return QuoteResult(
+            currency="ZAR",
+            subtotal_cents=subtotal,
+            lines=priced,
+            rates=rates,
+            label=quote_label(settings) + " Payment remains a simulated test payment.",
+        )
     rates = _courier(settings).quote(region=province)
     return QuoteResult(currency="ZAR", subtotal_cents=subtotal, lines=priced, rates=rates)
 
@@ -126,9 +137,15 @@ def place_simulated_order(
     if accept_terms is not True or terms_version.strip() != TERMS_VERSION:
         raise CheckoutValidationError("Accept the current Terms and Conditions before payment.")
     quoted = _priced_lines(session, settings, lines)
-    selected = _selected_rate(settings, province, service_code)
-    if expected_shipping_cents is not None and expected_shipping_cents != selected.shipping_cents:
-        raise CheckoutValidationError("The delivery amount does not match the simulated quote.")
+    subtotal = sum(line.line_total_cents for line in quoted)
+    if _uses_shiplogic_quotes(settings):
+        from app.checkout.sandbox import _match_rate
+
+        selected = _match_rate(settings, delivery, province, quoted, subtotal, service_code, expected_shipping_cents)
+    else:
+        selected = _selected_rate(settings, province, service_code)
+        if expected_shipping_cents is not None and expected_shipping_cents != selected.shipping_cents:
+            raise CheckoutValidationError("The delivery amount does not match the simulated quote.")
     draft = OrderDraft(
         idempotency_key=idempotency_key,
         customer_name=customer_name,
@@ -295,6 +312,12 @@ def _priced_lines(session: Session, settings: Settings, lines: list[OrderLine]) 
             )
         )
     return priced
+
+
+def _uses_shiplogic_quotes(settings: Settings) -> bool:
+    from app.checkout.sandbox import shiplogic_quotes_configured
+
+    return settings.checkout_simulation_active and shiplogic_quotes_configured(settings)
 
 
 def _courier(settings: Settings) -> SimulatedCourier:

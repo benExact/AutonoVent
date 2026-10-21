@@ -160,13 +160,6 @@ class Settings(BaseSettings):
                 raise ValueError("PayFast sandbox mode must be set to sandbox.")
             if not self.shiplogic_api_token.strip():
                 raise ValueError("ShipLogic sandbox checkout needs SHIPLOGIC_API_TOKEN.")
-            if not self.payfast_merchant_id.strip() or not self.payfast_merchant_key.strip():
-                raise ValueError("PayFast sandbox checkout needs PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY.")
-            if not self.payfast_notify_url.strip().lower().startswith("https://"):
-                raise ValueError("PayFast sandbox checkout needs an https PAYFAST_NOTIFY_URL.")
-            for label, url in (("PAYFAST_RETURN_URL", self.payfast_return_url), ("PAYFAST_CANCEL_URL", self.payfast_cancel_url)):
-                if not url.strip().lower().startswith(("http://", "https://")):
-                    raise ValueError(f"PayFast sandbox checkout needs {label}.")
         elif courier == "simulated" or payment == "simulated":
             if courier != "simulated" or payment != "simulated":
                 raise ValueError("Simulated checkout needs both the simulated courier and the simulated payment.")

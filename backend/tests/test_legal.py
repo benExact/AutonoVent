@@ -61,7 +61,7 @@ def test_footer_and_checkout_link_to_the_legal_pages() -> None:
     assert 'target="_blank"' in checkout
     assert 'name="accept_terms"' in checkout
     assert "v1.0-draft" in checkout
-    assert "does not turn that test into a real payment" in checkout
+    assert "does not mark the order paid" in checkout
     script = (ROOT / "js" / "checkout.js").read_text(encoding="utf-8")
     assert "accept_terms: true" in script
-    assert "Accept the Terms and Conditions before the simulated payment." in script
+    assert "Accept the Terms and Conditions before payment." in script

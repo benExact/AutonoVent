@@ -1,26 +1,40 @@
-/* Simulated checkout. Amounts shown after a quote come from the server response. */
+/* Checkout. Amounts and payment status come from the server response. */
 
 (function () {
+  const flow = window.AutonoventCheckoutFlow;
   const status = document.querySelector("[data-checkout-status]");
-  const cartHost = document.querySelector("[data-checkout-cart]");
   const form = document.querySelector("[data-checkout-form]");
   const quoteHost = document.querySelector("[data-quote-options]");
+  const summaryHost = document.querySelector("[data-order-summary]");
   const paymentHost = document.querySelector("[data-checkout-payment]");
   const baseUrl = window.AUTONOVENT_API_BASE_URL;
   const endpoint = typeof baseUrl === "string" ? baseUrl.replace(/\/$/, "") : "";
+  const addressNames = new Set(["line1", "line2", "local_area", "city", "region", "postal_code", "country"]);
 
-  if (!status || !cartHost || !form || !quoteHost || !paymentHost || !window.AutonoventCart) {
+  if (!flow || !status || !form || !quoteHost || !summaryHost || !paymentHost || !window.AutonoventCart) {
     return;
   }
 
   const pendingKey = "autonovent-checkout-pending";
+  const scheduler = flow.createQuoteScheduler(flow.debounceMs);
+  const submitLock = flow.createSubmitLock();
+  const clock = {
+    later: function (delay, fn) { return window.setTimeout(fn, delay); },
+    clear: function (timer) { window.clearTimeout(timer); },
+  };
   let catalogue = [];
   let quote = null;
+  let quoteKey = "";
+  let quoteFetchedAt = 0;
+  let quoteRequest = 0;
+  let inFlightKey = "";
+  let selectedCode = "";
   let checkoutMode = "unavailable";
+  let shippingQuotes = "";
 
-  function money(cents, currency) {
+  function money(cents) {
     try {
-      return new Intl.NumberFormat("en-ZA", { style: "currency", currency: currency || "ZAR" }).format(cents / 100);
+      return new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(cents / 100);
     } catch (error) {
       return "";
     }
@@ -59,17 +73,35 @@
     });
   }
 
-  function deliveryPayload() {
+  function readAddress() {
     const data = new FormData(form);
     return {
-      name: String(data.get("customer_name") || ""),
       line1: String(data.get("line1") || ""),
-      line2: String(data.get("line2") || "") || null,
+      line2: String(data.get("line2") || ""),
       local_area: String(data.get("local_area") || ""),
       city: String(data.get("city") || ""),
       region: String(data.get("region") || ""),
       postal_code: String(data.get("postal_code") || ""),
       country: String(data.get("country") || "ZA"),
+    };
+  }
+
+  function recipientName() {
+    const data = new FormData(form);
+    return flow.customerName(data.get("given_name"), data.get("family_name"));
+  }
+
+  function deliveryPayload() {
+    const address = readAddress();
+    return {
+      name: recipientName() || "Customer",
+      line1: address.line1,
+      line2: address.line2 || null,
+      local_area: address.local_area,
+      city: address.city,
+      region: address.region,
+      postal_code: address.postal_code,
+      country: address.country || "ZA",
     };
   }
 
@@ -113,127 +145,215 @@
     window.sessionStorage.setItem(pendingKey, JSON.stringify(saved));
   }
 
-  function quantityControl(line, productId) {
-    const controls = document.createElement("div");
-    controls.className = "button-row";
-    const decrease = document.createElement("button");
-    decrease.type = "button";
-    decrease.className = "button button--secondary";
-    decrease.textContent = "Decrease";
-    decrease.addEventListener("click", () => {
-      window.AutonoventCart.setQuantity(productId, line.quantity - 1);
-      quote = null;
-      quoteHost.replaceChildren();
-      renderCart();
-    });
-    const increase = document.createElement("button");
-    increase.type = "button";
-    increase.className = "button button--secondary";
-    increase.textContent = "Increase";
-    increase.disabled = line.quantity >= 20;
-    increase.addEventListener("click", () => {
-      window.AutonoventCart.setQuantity(productId, line.quantity + 1);
-      quote = null;
-      quoteHost.replaceChildren();
-      renderCart();
-    });
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "button button--secondary";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", () => {
-      window.AutonoventCart.remove(productId);
-      quote = null;
-      quoteHost.replaceChildren();
-      renderCart();
-    });
-    controls.append(decrease, increase, remove);
-    return controls;
+  function quoteAge() {
+    return quote ? Date.now() - quoteFetchedAt : flow.quoteLifetimeMs;
   }
 
-  function renderCart() {
-    cartHost.replaceChildren();
+  function selectedOption() {
+    if (!quote || !selectedCode) {
+      return null;
+    }
+    return quote.quotes.find((option) => option.service_code === selectedCode) || null;
+  }
+
+  function selectedQuote() {
+    const option = selectedOption();
+    if (!option) {
+      return null;
+    }
+    return { service_code: option.service_code, shipping_cents: option.shipping_cents };
+  }
+
+  function clearQuote() {
+    quote = null;
+    quoteKey = "";
+    quoteFetchedAt = 0;
+    selectedCode = "";
+    quoteHost.replaceChildren();
+    quoteHost.removeAttribute("aria-busy");
+  }
+
+  function renderSummary() {
+    summaryHost.replaceChildren();
+    const heading = document.createElement("h2");
+    heading.textContent = "Order summary";
+    summaryHost.append(heading);
     const lines = window.AutonoventCart.read();
     if (!lines.length) {
-      setStatus("Your cart is empty. Add a listed product from the shop.");
-      form.hidden = true;
-      form.style.display = "none";
+      const empty = document.createElement("p");
+      empty.textContent = "Your cart is empty.";
+      summaryHost.append(empty);
       return;
     }
-    const list = document.createElement("ul");
-    list.className = "catalogue-list";
     let subtotal = 0;
-    let priced = true;
     lines.forEach((line) => {
+      const quoted = quote && quote.lines.find((item) => item.product_id === line.productId);
       const product = catalogue.find((item) => item.id === line.productId);
-      const row = document.createElement("li");
-      const name = document.createElement("h2");
-      name.textContent = product ? product.name : "This product is not listed for purchase.";
-      const quantity = document.createElement("p");
-      quantity.textContent = "Quantity " + line.quantity;
-      row.append(name, quantity);
-      if (product && Number.isInteger(product.unit_price_cents)) {
-        subtotal += product.unit_price_cents * line.quantity;
+      const row = document.createElement("div");
+      row.className = "checkout-line";
+      const name = document.createElement("p");
+      const label = quoted ? quoted.product_name : (product ? product.name : "This product is not listed for purchase.");
+      name.textContent = label;
+      row.append(name);
+      const unit = quoted ? quoted.unit_price_cents : (product ? product.unit_price_cents : null);
+      if (Number.isInteger(unit)) {
+        subtotal += unit * line.quantity;
         const price = document.createElement("p");
-        price.className = "catalogue-price";
-        price.textContent = money(product.unit_price_cents, product.currency) + (product.price_is_demo ? " each. Test price — not a confirmed selling price." : " each.");
+        price.textContent = line.quantity + " × " + money(unit);
         row.append(price);
-      } else {
-        priced = false;
       }
-      row.append(quantityControl(line, line.productId));
-      list.append(row);
+      row.append(window.AutonoventCart.lineControls(line.productId, line.quantity, () => {
+        quoteRequest += 1;
+        clearQuote();
+        renderSummary();
+        scheduleRates();
+      }));
+      summaryHost.append(row);
     });
-    cartHost.append(list);
-    if (priced) {
-      const total = document.createElement("p");
-      total.className = "catalogue-price";
-      total.textContent = "Cart subtotal " + money(subtotal, "ZAR") + ". The server calculates the order total after the delivery quote.";
-      cartHost.append(total);
+    const option = selectedOption();
+    const totals = flow.displayTotal(quote ? quote.subtotal_cents : subtotal, option);
+    const delivery = document.createElement("p");
+    if (option) {
+      delivery.textContent = option.service_name + " delivery " + money(option.shipping_cents) + ", VAT inclusive.";
+    } else {
+      delivery.textContent = "Delivery is not selected.";
     }
-    form.hidden = false;
-    form.style.display = "";
-    setStatus(checkoutMode === "sandbox"
-      ? "Enter your contact details and a South African delivery address, then request a ShipLogic sandbox quote."
-      : "Enter your contact details and a South African delivery address, then request a simulated delivery quote.");
+    const total = document.createElement("p");
+    total.className = "checkout-total";
+    total.textContent = totals.totalCents === null ? "Total " + money(totals.subtotalCents) + " before delivery." : "Total " + money(totals.totalCents);
+    summaryHost.append(delivery, total);
   }
 
-  function renderQuote(body) {
+  function renderRates(body) {
     quote = body;
     quoteHost.replaceChildren();
-    const summary = document.createElement("p");
-    summary.textContent = "Product subtotal " + money(body.subtotal_cents, body.currency) + ". " + body.label;
-    quoteHost.append(summary);
-    body.lines.forEach((line) => {
-      const row = document.createElement("p");
-      row.textContent = line.quantity + " × " + line.product_name + " at " + money(line.unit_price_cents, body.currency) + " = " + money(line.line_total_cents, body.currency) + (line.price_is_demo ? ". Test price — not a confirmed selling price." : "");
-      quoteHost.append(row);
-    });
+    if (!body.quotes || !body.quotes.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "No delivery rates are available for this address.";
+      quoteHost.append(empty, retryButton());
+      renderSummary();
+      return;
+    }
     body.quotes.forEach((option) => {
-      const wrapper = document.createElement("label");
-      wrapper.className = "field";
+      const card = document.createElement("label");
+      card.className = "quote-card";
       const input = document.createElement("input");
       input.type = "radio";
       input.name = "service_code";
       input.value = option.service_code;
-      input.required = true;
-      input.dataset.shippingCents = String(option.shipping_cents);
-      const text = document.createElement("span");
-      text.textContent = option.service_name + " — delivery " + money(option.shipping_cents, body.currency) + ", total " + money(option.total_cents, body.currency) + ". " + option.label;
-      wrapper.append(input, text);
-      quoteHost.append(wrapper);
+      input.checked = option.service_code === selectedCode;
+      const name = document.createElement("strong");
+      name.textContent = option.service_name;
+      const price = document.createElement("span");
+      price.className = "quote-price";
+      price.textContent = money(option.shipping_cents) + " VAT inclusive";
+      card.append(input, name, price);
+      const estimate = flow.deliveryEstimate(option);
+      if (estimate) {
+        const when = document.createElement("span");
+        when.textContent = "Delivery window " + estimate + ".";
+        card.append(when);
+      }
+      quoteHost.append(card);
     });
+    if (selectedCode && !body.quotes.some((option) => option.service_code === selectedCode)) {
+      selectedCode = "";
+      setStatus("The previous delivery option is no longer available. Choose one of the current rates.");
+    }
+    if (body.label) {
+      const note = document.createElement("p");
+      note.className = "field-note";
+      note.textContent = body.label;
+      quoteHost.append(note);
+    }
+    renderSummary();
   }
 
-  function selectedQuote() {
-    const selected = form.querySelector("input[name='service_code']:checked");
-    if (!selected) {
-      return null;
+  function retryButton() {
+    const button = document.createElement("button");
+    button.className = "button button--secondary checkout-retry";
+    button.type = "button";
+    button.textContent = "Try delivery rates again";
+    button.addEventListener("click", () => requestRates(true));
+    return button;
+  }
+
+  function showRateError(message) {
+    clearQuote();
+    const text = document.createElement("p");
+    text.textContent = message;
+    quoteHost.append(text, retryButton());
+    renderSummary();
+  }
+
+  function requestRates(force) {
+    const address = readAddress();
+    const key = flow.addressKey(address, linePayload());
+    const decision = flow.quoteDecision({
+      valid: flow.addressIsValid(address),
+      key: key,
+      quotedKey: quoteKey,
+      ageMs: quoteAge(),
+      inFlightKey: inFlightKey,
+    });
+    if (!force && decision !== "request") {
+      return;
     }
-    return {
-      service_code: selected.value,
-      shipping_cents: Number(selected.dataset.shippingCents),
-    };
+    if (!flow.addressIsValid(address)) {
+      return;
+    }
+    const requestId = quoteRequest + 1;
+    quoteRequest = requestId;
+    inFlightKey = key;
+    quoteHost.setAttribute("aria-busy", "true");
+    setStatus(shippingQuotes === "shiplogic" ? "Checking ShipLogic sandbox delivery rates." : "Checking delivery rates.");
+    csrf()
+      .then((token) => post("/api/v1/checkout/quotes", { delivery: deliveryPayload(), lines: linePayload() }, token))
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (requestId !== quoteRequest) {
+          return;
+        }
+        if (!response.ok) {
+          showRateError(detailMessage(body));
+          return;
+        }
+        quoteKey = key;
+        quoteFetchedAt = Date.now();
+        renderRates(body);
+        quoteHost.removeAttribute("aria-busy");
+        if (!body.quotes || !body.quotes.length) {
+          setStatus("No delivery rates are available for this address. No delivery price has been estimated.");
+          return;
+        }
+        setStatus("Choose a delivery option. The server checks the price again before payment.");
+      })
+      .catch(() => {
+        if (requestId !== quoteRequest) {
+          return;
+        }
+        showRateError(shippingQuotes === "shiplogic"
+          ? "ShipLogic sandbox rates could not be loaded. No delivery price has been estimated."
+          : "Delivery rates could not be loaded. No delivery price has been estimated.");
+      })
+      .finally(() => {
+        if (inFlightKey === key) {
+          inFlightKey = "";
+        }
+      });
+  }
+
+  function scheduleRates() {
+    scheduler.push(() => requestRates(false), clock);
+  }
+
+  function releasePay() {
+    submitLock.release();
+    const button = form.querySelector("[data-place-order]");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Pay Now";
+    }
   }
 
   function renderPayment(order) {
@@ -243,15 +363,14 @@
     const title = document.createElement("p");
     title.textContent = order.label + " " + order.order_number;
     const amounts = document.createElement("p");
-    amounts.textContent = "Subtotal " + money(order.subtotal_cents, order.currency) + ". Delivery " + money(order.shipping_cents, order.currency) + ". Total " + money(order.total_cents, order.currency) + ".";
+    amounts.textContent = "Subtotal " + money(order.subtotal_cents) + ". Delivery " + money(order.shipping_cents) + ". Total " + money(order.total_cents) + ".";
     const payment = document.createElement("p");
     payment.textContent = "Payment " + order.payment_status + ". Fulfilment " + order.fulfilment_status + ". " + order.payment_label;
+    summary.append(title, amounts, payment);
     if (order.payment_reference) {
       const reference = document.createElement("p");
       reference.textContent = "Payment reference " + order.payment_reference + ".";
-      summary.append(title, amounts, payment, reference);
-    } else {
-      summary.append(title, amounts, payment);
+      summary.append(reference);
     }
     paymentHost.append(summary);
     if (order.payment_status === "paid") {
@@ -269,6 +388,24 @@
       paymentHost.append(done);
       return;
     }
+    if (checkoutMode === "sandbox") {
+      const returned = new URLSearchParams(window.location.search).get("payment");
+      if (returned === "return") {
+        setStatus("You have returned from PayFast. This order stays unpaid until the sandbox notification is verified.");
+      } else if (returned === "cancel") {
+        setStatus("The PayFast sandbox payment was cancelled. The order is not paid.");
+      } else {
+        setStatus("Opening the PayFast sandbox. Returning to this page does not confirm payment.");
+        startPayfast(order.id);
+      }
+      const retry = document.createElement("button");
+      retry.className = "button button--secondary";
+      retry.type = "button";
+      retry.textContent = "Open PayFast sandbox again";
+      retry.addEventListener("click", () => startPayfast(order.id));
+      paymentHost.append(retry);
+      return;
+    }
     const actions = document.createElement("div");
     actions.className = "button-row";
     [
@@ -283,18 +420,6 @@
       button.addEventListener("click", () => pay(order.id, pair[0], button));
       actions.append(button);
     });
-    if (checkoutMode === "sandbox") {
-      const returned = new URLSearchParams(window.location.search).get("payment");
-      if (returned === "return") {
-        setStatus("You have returned from PayFast. This order stays unpaid until the sandbox notification is verified.");
-      } else if (returned === "cancel") {
-        setStatus("The PayFast sandbox payment was cancelled. The order is not paid.");
-      } else {
-        setStatus("Opening the PayFast sandbox. Returning to this page does not confirm payment.");
-        startPayfast(order.id);
-      }
-      return;
-    }
     paymentHost.append(actions);
     setStatus("Choose a simulated payment result. A failed or cancelled payment does not mark the order paid.");
   }
@@ -304,8 +429,8 @@
       .then((token) => post("/api/v1/checkout/orders/" + orderId + "/payfast", {}, token))
       .then(async (response) => {
         const body = await response.json().catch(() => null);
-        if (!response.ok || !body || body.action !== "https://sandbox.payfast.co.za/eng/process" || !body.fields) {
-          setStatus(detailMessage(body));
+        if (!response.ok || !body || !flow.payfastActionAllowed(body.action) || !body.fields) {
+          setStatus(detailMessage(body) || "PayFast sandbox is not available. The order is not paid.");
           return;
         }
         const redirect = document.createElement("form");
@@ -351,42 +476,8 @@
       });
   }
 
-  form.addEventListener("input", (event) => {
-    if (event.target && event.target.name === "service_code") {
-      return;
-    }
-    quote = null;
-    quoteHost.replaceChildren();
-  });
-
-  document.querySelector("[data-quote-button]").addEventListener("click", () => {
-    if (!form.reportValidity()) {
-      return;
-    }
-    setStatus(checkoutMode === "sandbox" ? "Requesting ShipLogic sandbox delivery quotes." : "Requesting simulated delivery quotes.");
-    csrf()
-      .then((token) => post("/api/v1/checkout/quotes", { delivery: deliveryPayload(), lines: linePayload() }, token))
-      .then(async (response) => {
-        const body = await response.json().catch(() => null);
-        if (!response.ok) {
-          setStatus(detailMessage(body));
-          return;
-        }
-        renderQuote(body);
-        if (!body.quotes || !body.quotes.length) {
-          setStatus("No priced delivery option was returned. No delivery price has been estimated.");
-          return;
-        }
-        setStatus(checkoutMode === "sandbox"
-          ? "Select a ShipLogic sandbox option. The total is calculated by the server."
-          : "Select a simulated delivery option. The total is calculated by the server.");
-      })
-      .catch(() => setStatus(checkoutMode === "sandbox" ? "ShipLogic sandbox quotes could not be loaded." : "Simulated delivery quotes could not be loaded."));
-  });
-
   const draftKey = "autonovent-checkout-draft";
   const termsBox = form.querySelector("[data-accept-terms]");
-  const placeButton = form.querySelector("[data-place-order]");
 
   function saveDraft() {
     const data = new FormData(form);
@@ -419,48 +510,82 @@
     }
   }
 
-  function syncTerms() {
-    if (placeButton && termsBox) {
-      placeButton.disabled = !termsBox.checked;
-    }
+  function onAddressEdited() {
+    quoteRequest += 1;
+    clearQuote();
+    renderSummary();
+    scheduleRates();
   }
 
-  restoreDraft();
-  syncTerms();
-  form.addEventListener("input", saveDraft);
-  form.addEventListener("change", () => {
+  form.addEventListener("input", (event) => {
     saveDraft();
-    syncTerms();
+    const name = event.target && event.target.name;
+    if (name === "service_code") {
+      selectedCode = event.target.value;
+      renderSummary();
+      return;
+    }
+    if (addressNames.has(name)) {
+      onAddressEdited();
+    }
   });
+
+  form.addEventListener("change", (event) => {
+    saveDraft();
+    const name = event.target && event.target.name;
+    if (name === "service_code") {
+      selectedCode = event.target.value;
+      renderSummary();
+      return;
+    }
+    if (addressNames.has(name)) {
+      onAddressEdited();
+    }
+  });
+
+  restoreDraft();
   if (window.AutonoventAddressSearch) {
     window.AutonoventAddressSearch.attach(form, { endpoint: endpoint });
   }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!form.reportValidity()) {
+      return;
+    }
     const selected = selectedQuote();
-    if (!quote || !selected) {
-      setStatus(checkoutMode === "sandbox" ? "Request and select a ShipLogic sandbox quote first." : "Request and select a simulated delivery quote first.");
-      return;
-    }
+    const ready = flow.canSubmit({
+      submitting: false,
+      termsAccepted: Boolean(termsBox && termsBox.checked),
+      quote: quote,
+      selected: selected,
+      ageMs: quoteAge(),
+    });
     if (!termsBox || !termsBox.checked) {
-      setStatus(checkoutMode === "sandbox" ? "Accept the Terms and Conditions before the PayFast sandbox payment." : "Accept the Terms and Conditions before the simulated payment.");
-      if (termsBox) {
-        termsBox.focus();
-      }
+      setStatus("Accept the Terms and Conditions before payment.");
+      termsBox.focus();
       return;
     }
-    const key = orderKey();
-    const data = new FormData(form);
-    const submitButton = form.querySelector("[data-place-order]");
-    if (submitButton) {
-      submitButton.disabled = true;
+    if (!ready || !selected) {
+      clearQuote();
+      setStatus("Choose a current delivery option. A rate older than five minutes is checked again.");
+      scheduleRates();
+      return;
     }
-    setStatus(checkoutMode === "sandbox" ? "Saving the order before the PayFast sandbox payment." : "Placing the simulated order.");
+    if (!submitLock.tryLock()) {
+      return;
+    }
+    const button = form.querySelector("[data-place-order]");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Opening payment…";
+    }
+    const data = new FormData(form);
+    setStatus(checkoutMode === "sandbox" ? "Saving the order before the PayFast sandbox payment." : "Saving the simulated order.");
     csrf()
       .then((token) => post("/api/v1/checkout/orders", {
-        idempotency_key: key,
-        customer_name: String(data.get("customer_name") || ""),
+        idempotency_key: orderKey(),
+        customer_name: recipientName(),
         customer_email: String(data.get("customer_email") || ""),
         customer_phone: String(data.get("customer_phone") || ""),
         delivery: deliveryPayload(),
@@ -474,11 +599,13 @@
         const body = await response.json().catch(() => null);
         if (!response.ok) {
           setStatus(detailMessage(body));
-          if (submitButton) {
-            submitButton.disabled = false;
-          }
+          releasePay();
           if (response.status === 409) {
             window.sessionStorage.removeItem(pendingKey);
+          }
+          if (response.status === 422) {
+            clearQuote();
+            scheduleRates();
           }
           return;
         }
@@ -487,8 +614,28 @@
         rememberOrder(body);
         renderPayment(body);
       })
-      .catch(() => setStatus(checkoutMode === "sandbox" ? "The order could not be saved." : "The simulated order could not be placed."));
+      .catch(() => {
+        setStatus(checkoutMode === "sandbox" ? "The order could not be saved." : "The simulated order could not be placed.");
+        releasePay();
+      });
   });
+
+  function showCart() {
+    const lines = window.AutonoventCart.read();
+    renderSummary();
+    if (!lines.length) {
+      setStatus("Your cart is empty. Add a listed product from the shop.");
+      form.hidden = true;
+      form.style.display = "none";
+      return;
+    }
+    form.hidden = false;
+    form.style.display = "";
+    if (!quote) {
+      setStatus("Enter a South African delivery address to see delivery rates.");
+      scheduleRates();
+    }
+  }
 
   if (!endpoint) {
     setStatus("The checkout service is not configured.");
@@ -499,22 +646,24 @@
     .then((response) => response.json())
     .then((body) => {
       checkoutMode = body && (body.checkout_mode === "sandbox" || body.checkout_mode === "simulation") ? body.checkout_mode : "unavailable";
+      shippingQuotes = body && body.shipping_quotes === "shiplogic" ? "shiplogic" : "simulated";
+      const banner = document.querySelector("[data-checkout-banner]");
+      const paymentNote = document.querySelector("[data-payment-note]");
       if (checkoutMode === "unavailable") {
         setStatus("Checkout is not enabled.");
         return;
       }
-      const quoteButton = document.querySelector("[data-quote-button]");
-      const placeButtonLabel = document.querySelector("[data-place-order]");
-      const paymentNote = document.querySelector("[data-payment-note]");
+      if (banner && checkoutMode === "simulation") {
+        banner.textContent = shippingQuotes === "shiplogic"
+          ? "Simulated test checkout. Delivery rates are ShipLogic sandbox prices and include VAT. Payments are not PayFast payments. No card details are collected."
+          : "Simulated test checkout. Delivery quotes are not ShipLogic prices. Payments are not PayFast payments. No card details are collected.";
+      }
       if (checkoutMode === "sandbox") {
-        if (quoteButton) {
-          quoteButton.textContent = "Get ShipLogic sandbox quotes";
-        }
-        if (placeButtonLabel) {
-          placeButtonLabel.textContent = "Continue to PayFast sandbox";
+        if (banner) {
+          banner.textContent = "PayFast sandbox checkout. Delivery rates are ShipLogic sandbox prices and include VAT. Returning from PayFast does not mark the order paid.";
         }
         if (paymentNote) {
-          paymentNote.textContent = "This continues to the PayFast sandbox. Returning from PayFast does not mark the order paid. Read the Privacy Notice before you continue.";
+          paymentNote.textContent = "Pay Now continues to the PayFast sandbox. Returning from PayFast does not mark the order paid. Read the Privacy Notice before you continue.";
         }
       }
       return fetch(endpoint + "/api/v1/products", { headers: { Accept: "application/json" } })
@@ -528,8 +677,8 @@
             renderPayment(pending.order);
             return;
           }
-          renderCart();
+          showCart();
         });
     })
-    .catch(() => setStatus("Simulated checkout could not be loaded."));
+    .catch(() => setStatus("Checkout could not be loaded."));
 })();

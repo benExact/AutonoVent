@@ -30,6 +30,9 @@ class SimulatedRate:
     quote_reference: str
     provider: str = SIMULATED_PROVIDER
     label: str = SIMULATED_LABEL
+    collection_cut_off: str | None = None
+    delivery_from: str | None = None
+    delivery_to: str | None = None
 
 
 def canonical_province(value: str) -> str:

@@ -100,6 +100,9 @@ def checkout_fields(
         raise PayfastConfigurationError("PayFast sandbox merchant details are not configured.")
     if not notify_url.lower().startswith("https://"):
         raise PayfastConfigurationError("PayFast needs an https notification URL.")
+    for label, url in (("return", return_url), ("cancel", cancel_url)):
+        if not url.strip().lower().startswith(("http://", "https://")):
+            raise PayfastConfigurationError(f"PayFast needs an absolute {label} URL.")
     fields = {
         "merchant_id": merchant_id.strip(),
         "merchant_key": merchant_key.strip(),

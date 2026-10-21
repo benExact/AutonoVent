@@ -1,6 +1,7 @@
 """Owner product management. These routes are not part of the public catalogue."""
 
 import uuid
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -121,6 +122,49 @@ def product_audit(
     )
 
 
+def _payment_readiness(settings) -> list[ReadinessItem]:
+    selected = settings.payment_provider == "payfast" and settings.payfast_mode == "sandbox"
+    if settings.payfast_mode not in {"", "sandbox"}:
+        configuration = "PAYFAST_MODE is not sandbox. Live PayFast is disabled."
+        configured = False
+    elif not selected:
+        configuration = "PayFast sandbox is not selected. Checkout still uses the simulated payment flow."
+        configured = False
+    else:
+        missing = []
+        if not settings.payfast_merchant_id.strip():
+            missing.append("PAYFAST_MERCHANT_ID")
+        if not settings.payfast_merchant_key.strip():
+            missing.append("PAYFAST_MERCHANT_KEY")
+        notify = settings.payfast_notify_url.strip()
+        host = (urlparse(notify).hostname or "").lower()
+        local_host = host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".local")
+        if missing:
+            configuration = "Missing PayFast sandbox credentials: " + ", ".join(missing) + "."
+            configured = False
+        elif not notify.lower().startswith("https://"):
+            configuration = "PAYFAST_NOTIFY_URL must be https. PayFast cannot notify a local address."
+            configured = False
+        elif local_host:
+            configuration = "The notification URL is not reachable from PayFast. Point PAYFAST_NOTIFY_URL at a temporary https tunnel for POST /api/v1/payments/payfast/itn."
+            configured = False
+        elif not settings.payfast_return_url.strip().lower().startswith(("http://", "https://")) or not settings.payfast_cancel_url.strip().lower().startswith(("http://", "https://")):
+            configuration = "PAYFAST_RETURN_URL and PAYFAST_CANCEL_URL must be absolute http or https addresses."
+            configured = False
+        else:
+            configuration = "PayFast sandbox merchant details and a public https notification URL are configured."
+            configured = True
+    return [
+        ReadinessItem(key="payment", label="PayFast sandbox configuration", ready=configured, detail=configuration),
+        ReadinessItem(
+            key="payfast_notification_test",
+            label="PayFast sandbox payment test",
+            ready=False,
+            detail="No successful sandbox payment notification has been recorded. A browser return does not count as payment.",
+        ),
+    ]
+
+
 @router.get("/readiness", response_model=ReadinessReport)
 def readiness(
     _principal: tuple[AdminUser, AdminSession] = Depends(require_owner),
@@ -171,7 +215,7 @@ def readiness(
                 key="packed_parcel",
                 label="Packed parcel dimensions and weight",
                 ready=parcel_ready,
-                detail="The packed parcel description, dimensions, and weight are configured."
+                detail="Parcel description, dimensions, and weight are configured from product specifications. They have not been confirmed as packed-parcel measurements."
                 if parcel_ready
                 else "Packed parcel dimensions and weight have not been recorded.",
             ),
@@ -203,11 +247,6 @@ def readiness(
                     else "The sandbox configuration is incomplete. No successful sandbox rate test has been recorded."
                 ),
             ),
-            ReadinessItem(
-                key="payment",
-                label="Payment provider",
-                ready=False,
-                detail="Payment setup is deferred until business registration is complete.",
-            ),
+            *_payment_readiness(settings),
         ],
     )
