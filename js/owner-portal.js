@@ -129,6 +129,14 @@
     });
   }
 
+  function downloadLink(orderId) {
+    const link = document.createElement("a");
+    link.className = "button button--secondary";
+    link.href = endpoint + "/api/v1/orders/" + encodeURIComponent(orderId) + "/document";
+    link.textContent = "Download PDF";
+    return link;
+  }
+
   function renderOrders(payload) {
     const host = document.querySelector("[data-orders-list]");
     const pages = document.querySelector("[data-orders-pages]");
@@ -146,6 +154,8 @@
     const table = document.createElement("div");
     table.className = "owner-table";
     payload.orders.forEach((order) => {
+      const entry = document.createElement("div");
+      entry.className = "owner-order";
       const link = document.createElement("a");
       link.className = "owner-row";
       link.href = "order.html?id=" + encodeURIComponent(order.id);
@@ -160,7 +170,8 @@
       const total = document.createElement("span");
       total.textContent = money(order.total_cents, order.currency);
       link.append(reference, customer, fulfilment, payment, total);
-      table.append(link);
+      entry.append(link, downloadLink(order.id));
+      table.append(entry);
     });
     host.append(table);
     if (payload.offset > 0) {
@@ -260,6 +271,7 @@
     document.title = "Autonovent | " + order.order_number;
     setStatus(status, "");
     host.replaceChildren();
+    host.append(downloadLink(order.id));
 
     const facts = document.createElement("dl");
     facts.className = "owner-facts";

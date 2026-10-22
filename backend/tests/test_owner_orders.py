@@ -10,7 +10,7 @@ from app.auth.service import create_initial_owner
 from app.core.config import get_settings
 from app.db.session import reset_engine
 from app.main import app
-from app.models.order import Order, OrderStatusEvent
+from app.models.order import Order, OrderItem, OrderStatusEvent
 from app.models.payment import Payment
 from app.orders.service import DeliveryAddress, OrderDraft, OrderLine, create_order
 
@@ -269,5 +269,96 @@ def test_fulfilment_update_requires_csrf_and_keeps_payment_pending(monkeypatch, 
             select(func.count()).select_from(OrderStatusEvent).where(OrderStatusEvent.to_status == "delivered")
         ) == 0
     engine.dispose()
+    reset_engine()
+    get_settings.cache_clear()
+
+
+def test_order_pdf_matches_the_stored_order_and_stays_private(monkeypatch, isolated_database_url: str) -> None:
+    from datetime import datetime, timezone
+    from pypdf import PdfReader
+    import io
+
+    _use_database(monkeypatch, isolated_database_url)
+    _owner(isolated_database_url)
+    order_id = _record(isolated_database_url, "fixture-owner-order-pdf")
+    engine = create_engine(isolated_database_url)
+    with Session(engine, expire_on_commit=False) as session:
+        stored = session.get(Order, order_id)
+        assert stored is not None
+        stored.customer_name = "José Möller"
+        stored.customer_phone = "+27 82 000 0000"
+        stored.delivery_line1 = "12 Long Address Road, " + ("North " * 20) + "Estate"
+        stored.shipping_provider = "shiplogic"
+        stored.shipping_service_code = "ECO"
+        stored.shipping_quote_reference = "rate-fixture"
+        stored.is_simulation = False
+        session.add(
+            OrderItem(
+                order_id=order_id,
+                product_name="Second fixture",
+                sku=None,
+                quantity=1,
+                unit_price_cents=500,
+                line_total_cents=500,
+            )
+        )
+        stored.subtotal_cents = 5500
+        stored.total_cents = 6734
+        session.add(
+            Payment(
+                order_id=order_id,
+                provider="payfast",
+                provider_reference="pf-fixture",
+                status="paid",
+                amount_cents=6734,
+                currency="ZAR",
+                created_at=datetime(2026, 10, 22, 16, 5, tzinfo=timezone.utc),
+                notification={"secret": "must-not-appear"},
+            )
+        )
+        session.add(
+            OrderStatusEvent(
+                order_id=order_id,
+                field_name="payment_status",
+                from_status="pending",
+                to_status="paid",
+                note="Leave at the gate.",
+                created_at=datetime(2026, 10, 22, 16, 6, tzinfo=timezone.utc),
+            )
+        )
+        stored.payment_status = "paid"
+        session.commit()
+        session.refresh(stored)
+        before = (stored.payment_status, stored.fulfilment_status, stored.updated_at, stored.total_cents)
+        order_number = stored.order_number
+    engine.dispose()
+    assert client.get(f"/api/v1/orders/{order_id}/document").status_code == 401
+    assert _login().status_code == 200
+    response = client.get(f"/api/v1/orders/{order_id}/document")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"] == f'attachment; filename="AutonoVent-Order-{order_number}.pdf"'
+    reader = PdfReader(io.BytesIO(response.content))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert order_number in text
+    assert "José Möller" in text
+    assert "Second fixture" in text
+    assert "Order fixture" in text
+    assert "Economy (ECO)" in text
+    assert "R 67,34" in text
+    assert "R 55,00" in text
+    assert "R 12,34" in text
+    assert "pf-fixture" in text
+    assert "Leave at the gate." in text
+    assert "must-not-appear" not in text
+    assert "A separate VAT amount is not recorded." in text
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        stored = session.get(Order, order_id)
+        assert stored is not None
+        assert (stored.payment_status, stored.fulfilment_status, stored.updated_at, stored.total_cents) == before
+    engine.dispose()
+    missing = client.get(f"/api/v1/orders/{uuid.uuid4()}/document")
+    assert missing.status_code == 404
     reset_engine()
     get_settings.cache_clear()

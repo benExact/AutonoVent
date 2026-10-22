@@ -1,8 +1,11 @@
 # Autonovent
-# Allow crawling. Do not disallow the production website.
+# Public pages may be crawled. Cart, checkout and the owner portal
+# carry a noindex instruction in the page itself. Owner data is
+# protected by sign-in, not by this file.
 
 User-agent: *
 Allow: /
 
-# Uncomment and replace PRODUCTION-DOMAIN before launch:
-# Sitemap: https://PRODUCTION-DOMAIN/sitemap.xml
+# The live hostname is not configured in this project.
+# After the public https origin is confirmed, add:
+# Sitemap: https://EXAMPLE/sitemap.xml

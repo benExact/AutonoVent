@@ -13,12 +13,38 @@
 
   let catalogue = [];
 
+  const imageFallback = "assets/images/product-placeholder.svg";
+
   function money(cents, currency) {
     try {
       return new Intl.NumberFormat("en-ZA", { style: "currency", currency: currency || "ZAR" }).format(cents / 100);
     } catch (error) {
       return "";
     }
+  }
+
+  function productImageSource(product) {
+    if (product && typeof product.image_url === "string" && product.image_url.indexOf("/media/products/") === 0) {
+      return endpoint + product.image_url;
+    }
+    return imageFallback;
+  }
+
+  function productThumbnail(product) {
+    const image = document.createElement("img");
+    image.className = "cart-thumb";
+    image.width = 72;
+    image.height = 72;
+    image.decoding = "async";
+    const source = productImageSource(product);
+    image.alt = source === imageFallback || !product ? "" : product.name;
+    image.src = source;
+    image.addEventListener("error", function onError() {
+      image.removeEventListener("error", onError);
+      image.src = imageFallback;
+      image.alt = "";
+    });
+    return image;
   }
 
   function render() {
@@ -31,33 +57,41 @@
       return;
     }
     const list = document.createElement("ul");
-    list.className = "catalogue-list";
+    list.className = "cart-lines";
     let subtotal = 0;
     let blocked = false;
     lines.forEach((line) => {
       const product = catalogue.find((item) => item.id === line.productId);
       const row = document.createElement("li");
+      row.className = "cart-line";
+      const details = document.createElement("div");
+      details.className = "cart-line__details";
       const name = document.createElement("h2");
       name.textContent = product ? product.name : "This product is not available for purchase.";
-      row.append(name);
+      details.append(name);
       if (product && Number.isInteger(product.unit_price_cents)) {
-        subtotal += product.unit_price_cents * line.quantity;
+        const lineCents = product.unit_price_cents * line.quantity;
+        subtotal += lineCents;
         const price = document.createElement("p");
         price.className = "catalogue-price";
         price.textContent = money(product.unit_price_cents, product.currency) + (product.price_is_demo ? " each. Test price — not a confirmed selling price." : " each.");
-        row.append(price);
+        details.append(price);
         if (typeof product.description === "string" && product.description.trim()) {
           const description = document.createElement("p");
           description.textContent = product.description;
-          row.append(description);
+          details.append(description);
         }
+        const lineTotal = document.createElement("p");
+        lineTotal.className = "cart-line__total";
+        lineTotal.textContent = "Line total " + money(lineCents, product.currency);
+        details.append(lineTotal);
       } else {
         blocked = true;
         const missing = document.createElement("p");
         missing.textContent = "This item cannot be purchased. Remove it to continue.";
-        row.append(missing);
+        details.append(missing);
       }
-      row.append(window.AutonoventCart.lineControls(line.productId, line.quantity, render));
+      row.append(productThumbnail(product), details, window.AutonoventCart.lineControls(line.productId, line.quantity, render));
       list.append(row);
     });
     host.append(list);

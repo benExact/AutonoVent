@@ -110,7 +110,7 @@ def test_product_management_requires_an_owner(monkeypatch, isolated_database_url
     assert client.get("/api/v1/admin/products").status_code == 401
     assert client.post("/api/v1/admin/products", json=PRODUCT).status_code == 401
     assert client.patch(f"/api/v1/admin/products/{uuid.uuid4()}", json={"name": "Fixture"}).status_code == 401
-    assert client.get("/api/v1/admin/readiness").status_code == 401
+    assert client.get("/api/v1/admin/readiness").status_code == 404
 
 
 def test_owner_can_save_several_products_and_the_catalogue_stays_selective(monkeypatch, isolated_database_url: str) -> None:
@@ -227,77 +227,6 @@ def test_product_edits_do_not_change_order_snapshots(monkeypatch, isolated_datab
         assert item.product_name == "Fixture product"
         assert item.line_total_cents == 2500
     engine.dispose()
-    reset_engine()
-    get_settings.cache_clear()
-
-
-def test_readiness_checklist_hides_secrets_and_does_not_invent_details(monkeypatch, isolated_database_url: str) -> None:
-    _use_database(monkeypatch, isolated_database_url)
-    _owner(isolated_database_url)
-    _login()
-    monkeypatch.setenv("SHIPLOGIC_API_TOKEN", "fixture-secret-token")
-    monkeypatch.setenv("SHIPLOGIC_MODE", "sandbox")
-    monkeypatch.setenv("COURIER_PROVIDER", "")
-    monkeypatch.setenv("COLLECTION_STREET_ADDRESS", "1 Fixture Street")
-    monkeypatch.setenv("COLLECTION_LOCAL_AREA", "Fixture suburb")
-    monkeypatch.setenv("COLLECTION_CITY", "Pretoria")
-    monkeypatch.setenv("COLLECTION_ZONE", "Gauteng")
-    monkeypatch.setenv("COLLECTION_POSTAL_CODE", "0002")
-    monkeypatch.setenv("PACKED_PARCEL_DESCRIPTION", "Fixture packed parcel")
-    monkeypatch.setenv("PACKED_PARCEL_LENGTH_MM", "200")
-    monkeypatch.setenv("PACKED_PARCEL_WIDTH_MM", "150")
-    monkeypatch.setenv("PACKED_PARCEL_HEIGHT_MM", "40")
-    monkeypatch.setenv("PACKED_PARCEL_WEIGHT_GRAMS", "2000")
-    get_settings.cache_clear()
-    report = client.get("/api/v1/admin/readiness")
-    assert report.status_code == 200
-    body = report.json()
-    assert body["checkout_enabled"] is False
-    assert "fixture-secret-token" not in report.text
-    assert "1 Fixture Street" not in report.text
-    items = {item["key"]: item for item in body["items"]}
-    assert items["selling_price"]["ready"] is False
-    assert items["collection_address"]["ready"] is True
-    assert items["packed_parcel"]["ready"] is True
-    assert items["shiplogic_provider"]["ready"] is False
-    assert items["shiplogic_token"]["ready"] is True
-    assert "sandbox token is configured" in items["shiplogic_token"]["detail"]
-    assert items["shiplogic_quote"]["ready"] is False
-    assert "No successful sandbox rate test" in items["shiplogic_quote"]["detail"]
-    assert items["payment"]["ready"] is False
-    assert "simulated payment flow" in items["payment"]["detail"]
-    assert items["payfast_notification_test"]["ready"] is False
-    assert "browser return does not count" in items["payfast_notification_test"]["detail"]
-    reset_engine()
-    get_settings.cache_clear()
-
-
-def test_payfast_readiness_reports_a_local_notification_url_without_secrets(monkeypatch, isolated_database_url: str) -> None:
-    _use_database(monkeypatch, isolated_database_url)
-    _owner(isolated_database_url)
-    _login()
-    monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
-    monkeypatch.setenv("COURIER_PROVIDER", "shiplogic")
-    monkeypatch.setenv("PAYMENT_PROVIDER", "payfast")
-    monkeypatch.setenv("PAYFAST_MODE", "sandbox")
-    monkeypatch.setenv("SHIPLOGIC_MODE", "sandbox")
-    monkeypatch.setenv("SHIPLOGIC_API_TOKEN", "fixture-secret-token")
-    monkeypatch.setenv("PAYFAST_MERCHANT_ID", "10000100")
-    monkeypatch.setenv("PAYFAST_MERCHANT_KEY", "fixture-merchant-key")
-    monkeypatch.setenv("PAYFAST_PASSPHRASE", "fixture-passphrase")
-    monkeypatch.setenv("PAYFAST_NOTIFY_URL", "https://127.0.0.1/api/v1/payments/payfast/itn")
-    monkeypatch.setenv("PAYFAST_RETURN_URL", "http://127.0.0.1:8765/checkout.html?payment=return")
-    monkeypatch.setenv("PAYFAST_CANCEL_URL", "http://127.0.0.1:8765/checkout.html?payment=cancel")
-    get_settings.cache_clear()
-    report = client.get("/api/v1/admin/readiness")
-    assert report.status_code == 200
-    assert "fixture-secret-token" not in report.text
-    assert "fixture-merchant-key" not in report.text
-    assert "fixture-passphrase" not in report.text
-    items = {item["key"]: item for item in report.json()["items"]}
-    assert items["payment"]["ready"] is False
-    assert "not reachable from PayFast" in items["payment"]["detail"]
-    assert items["payfast_notification_test"]["ready"] is False
     reset_engine()
     get_settings.cache_clear()
 

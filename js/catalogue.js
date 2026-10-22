@@ -133,6 +133,59 @@
     list.replaceChildren(catalogue);
   }
 
+  function publishProductSchema(products) {
+    if (!/\/product\.html$/.test(window.location.pathname)) {
+      return;
+    }
+    var origin = (window.location.origin || "").replace(/\/$/, "");
+    if (!origin || origin === "null") {
+      return;
+    }
+    var graph = [];
+    products.forEach(function (product) {
+      if (!product || typeof product.name !== "string" || !Number.isInteger(product.unit_price_cents) || product.price_is_demo) {
+        return;
+      }
+      var price = (product.unit_price_cents / 100).toFixed(2);
+      var node = {
+        "@type": "Product",
+        name: product.name,
+        description: typeof product.description === "string" && product.description.trim()
+          ? product.description.trim()
+          : "A bakkie canopy vent designed to help reduce dust entering the canopy while driving.",
+        brand: { "@type": "Brand", name: "Autonovent" },
+        offers: {
+          "@type": "Offer",
+          priceCurrency: product.currency || "ZAR",
+          price: price,
+          availability: "https://schema.org/InStock",
+          url: origin + "/product.html"
+        }
+      };
+      if (typeof product.sku === "string" && product.sku.trim()) {
+        node.sku = product.sku.trim();
+      }
+      if (typeof baseUrl === "string" && typeof product.image_url === "string" && product.image_url.indexOf("/media/products/") === 0) {
+        node.image = baseUrl.replace(/\/$/, "") + product.image_url;
+      }
+      graph.push(node);
+    });
+    if (!graph.length) {
+      return;
+    }
+    var script = document.getElementById("product-schema");
+    if (!script) {
+      script = document.createElement("script");
+      script.id = "product-schema";
+      script.type = "application/ld+json";
+      document.head.appendChild(script);
+    }
+    script.textContent = JSON.stringify(graph.length === 1 ? Object.assign({ "@context": "https://schema.org" }, graph[0]) : {
+      "@context": "https://schema.org",
+      "@graph": graph
+    });
+  }
+
   function loadCatalogue() {
     retry.hidden = true;
     setStatus("Loading products.");
@@ -164,6 +217,7 @@
         }
 
         renderProducts(body.products);
+        publishProductSchema(body.products);
       })
       .catch(() => {
         setStatus("The product list could not be loaded. No price is shown.");

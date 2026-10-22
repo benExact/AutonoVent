@@ -917,6 +917,77 @@ a {
   margin-top: var(--space-sm);
 }
 
+.cart-lines {
+  display: grid;
+  gap: var(--space-lg);
+  margin: var(--space-xl) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cart-line {
+  display: grid;
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+  column-gap: var(--space-md);
+  row-gap: var(--space-sm);
+  align-items: start;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.cart-thumb {
+  width: 3.75rem;
+  height: 3.75rem;
+  grid-row: 1 / span 2;
+  object-fit: cover;
+  object-position: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-forest);
+}
+
+.cart-line__details {
+  min-width: 0;
+}
+
+.cart-line h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.cart-line p {
+  margin-top: var(--space-xs);
+  overflow-wrap: anywhere;
+}
+
+.cart-line__total {
+  color: var(--color-offwhite);
+  font-weight: 700;
+}
+
+.cart-line .qty-control {
+  grid-column: 2;
+  margin-top: 0;
+}
+
+@media (min-width: 48rem) {
+  .cart-line {
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .cart-thumb {
+    width: 4.5rem;
+    height: 4.5rem;
+    grid-row: auto;
+  }
+
+  .cart-line .qty-control {
+    grid-column: auto;
+    justify-self: end;
+  }
+}
+
 .quote-option {
   display: flex;
   align-items: flex-start;
@@ -1098,6 +1169,16 @@ a {
   margin-top: var(--space-lg);
 }
 
+.owner-order {
+  display: grid;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.owner-order .button {
+  justify-self: start;
+}
+
 .owner-row {
   display: grid;
   gap: var(--space-2xs);
@@ -1163,32 +1244,6 @@ a {
   display: none;
 }
 
-.owner-check {
-  display: grid;
-  gap: var(--space-sm);
-  margin: var(--space-lg) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.owner-check li {
-  display: grid;
-  gap: var(--space-2xs);
-  padding: var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.owner-check span {
-  color: var(--color-sand);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.owner-check p,
 .field-note {
   margin: 0;
   color: var(--color-sage);
@@ -1326,6 +1381,10 @@ a {
   .owner-row {
     grid-template-columns: 1.2fr 1.4fr 1fr 1fr auto;
     align-items: center;
+  }
+
+  .owner-order {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
+from app.auth.service import create_initial_owner
 from app.core.config import Settings, get_settings
 from app.db.session import reset_engine
 from app.main import app
@@ -136,6 +137,43 @@ def _clear(isolated_database_url: str):
         connection.execute(text("DELETE FROM orders"))
         connection.execute(text("DELETE FROM products WHERE slug = 'fixture-sandbox'"))
     engine.dispose()
+
+
+def test_signed_in_owner_quote_uses_the_session_cookie_not_the_empty_csrf_body(monkeypatch, isolated_database_url: str) -> None:
+    token = _prepare(monkeypatch, isolated_database_url)
+    _install_shiplogic(monkeypatch)
+    engine = create_engine(isolated_database_url)
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM admin_sessions"))
+        connection.execute(text("DELETE FROM admin_users"))
+    with Session(engine) as session:
+        create_initial_owner(session, "fixture-owner@example.com", "fixture-password-1")
+    engine.dispose()
+    logged_in = client.post(
+        "/api/v1/auth/login",
+        json={"email": "fixture-owner@example.com", "password": "fixture-password-1"},
+        headers={"X-CSRF-Token": token},
+    )
+    assert logged_in.status_code == 200
+    issued = client.get("/api/v1/auth/csrf")
+    assert issued.status_code == 200
+    assert issued.json()["csrf_token"] == ""
+    session_csrf = client.cookies.get("autonovent_csrf")
+    assert session_csrf
+    payload = {"delivery": _delivery(), "lines": [{"product_id": str(PRICED_ID), "quantity": 1}]}
+    try:
+        blocked = client.post("/api/v1/checkout/quotes", headers={"X-CSRF-Token": ""}, json=payload)
+        assert blocked.status_code == 403
+        assert blocked.json()["detail"] == "This request could not be verified."
+        mismatched = client.post("/api/v1/checkout/quotes", headers={"X-CSRF-Token": "not-the-session-token"}, json=payload)
+        assert mismatched.status_code == 403
+        assert mismatched.json()["detail"] == "This request could not be verified."
+        allowed = client.post("/api/v1/checkout/quotes", headers={"X-CSRF-Token": session_csrf}, json=payload)
+        assert allowed.status_code == 200
+        assert allowed.json()["quotes"][0]["service_code"] == "ECO"
+        assert allowed.json()["quotes"][0]["shipping_cents"] == 8500
+    finally:
+        client.cookies.clear()
 
 
 def test_quote_uses_configured_address_and_parcel_and_skips_unpriced_rates(monkeypatch, isolated_database_url: str) -> None:

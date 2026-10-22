@@ -75,13 +75,6 @@ def list_audit_events(session: Session, product_id: uuid.UUID) -> list[ProductAu
     )
 
 
-def selling_price_status(session: Session) -> tuple[bool, str]:
-    active = list(session.scalars(select(Product).where(Product.active.is_(True))))
-    if not active or any(product.unit_price_cents is None for product in active):
-        return False, "No active product has a confirmed selling price."
-    return True, "Every active product has a selling price."
-
-
 def _changes(previous: dict[str, object], fields: dict[str, object], *, include_unchanged: bool) -> list[dict[str, object]]:
     changes = []
     for field in AUDITED_FIELDS:

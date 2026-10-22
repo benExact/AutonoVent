@@ -54,10 +54,28 @@
     return "Check the address and try again.";
   }
 
+  let csrfRequest = null;
+
+  function csrfFromCookie() {
+    const parts = document.cookie ? document.cookie.split("; ") : [];
+    const match = parts.find((part) => part.startsWith("autonovent_csrf="));
+    return match ? decodeURIComponent(match.slice("autonovent_csrf=".length)) : "";
+  }
+
   function csrf() {
-    return fetch(endpoint + "/api/v1/auth/csrf", { credentials: "include", headers: { Accept: "application/json" } })
-      .then((response) => response.json())
-      .then((body) => body.csrf_token || "");
+    const existing = csrfFromCookie();
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+    if (!csrfRequest) {
+      csrfRequest = fetch(endpoint + "/api/v1/auth/csrf", { credentials: "include", headers: { Accept: "application/json" } })
+        .then((response) => response.json())
+        .then((body) => body.csrf_token || csrfFromCookie())
+        .finally(() => {
+          csrfRequest = null;
+        });
+    }
+    return csrfRequest;
   }
 
   function post(path, payload, token) {

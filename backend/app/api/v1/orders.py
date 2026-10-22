@@ -3,6 +3,8 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,8 @@ from app.db.session import get_session
 from app.models.admin import AdminUser
 from app.models.auth import AdminSession
 from app.models.order import Order
+from app.models.payment import Payment
+from app.orders.pdf import document_filename, render_order_pdf
 from app.orders.service import (
     OrderValidationError,
     allowed_fulfilment_statuses,
@@ -148,6 +152,27 @@ def order_detail(
     if order is None:
         raise HTTPException(status_code=404, detail="The order does not exist.")
     return _detail(session, order)
+
+
+@router.get("/orders/{order_id}/document")
+def order_document(
+    order_id: uuid.UUID,
+    _principal: tuple[AdminUser, AdminSession] = Depends(require_owner),
+    session: Session = Depends(get_session),
+) -> Response:
+    try:
+        order = get_order(session, order_id)
+        payments = list(session.scalars(select(Payment).where(Payment.order_id == order_id))) if order is not None else []
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    if order is None:
+        raise HTTPException(status_code=404, detail="The order does not exist.")
+    filename = document_filename(order.order_number)
+    return Response(
+        content=render_order_pdf(order, payments),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.patch("/orders/{order_id}/fulfilment", response_model=OrderDetail)

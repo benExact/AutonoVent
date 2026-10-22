@@ -156,3 +156,75 @@ test("product prices use rands and shop thumbnails keep their shape", () => {
   assert.match(owner, /name="price_rands"/);
   assert.match(owner, />R</);
 });
+
+test("checkout keeps a signed-in verification cookie instead of sending an empty token", () => {
+  const checkout = fs.readFileSync(path.join(__dirname, "checkout.js"), "utf8");
+  assert.match(checkout, /function csrfFromCookie\(\)/);
+  assert.match(checkout, /autonovent_csrf=/);
+  assert.match(checkout, /body\.csrf_token \|\| csrfFromCookie\(\)/);
+  assert.match(checkout, /if \(existing\) \{\s*return Promise\.resolve\(existing\);/);
+});
+
+test("owner navigation no longer includes readiness and orders can download a PDF", () => {
+  const root = path.join(__dirname, "..");
+  const orders = fs.readFileSync(path.join(root, "owner", "orders.html"), "utf8");
+  const order = fs.readFileSync(path.join(root, "owner", "order.html"), "utf8");
+  const products = fs.readFileSync(path.join(root, "owner", "products.html"), "utf8");
+  const portal = fs.readFileSync(path.join(__dirname, "owner-portal.js"), "utf8");
+  assert.equal(fs.existsSync(path.join(root, "owner", "readiness.html")), false);
+  assert.doesNotMatch(orders + order + products, /readiness\.html/);
+  assert.match(portal, /Download PDF/);
+  assert.match(portal, /\/document/);
+});
+
+test("public pages have unique titles and private routes stay out of the sitemap", () => {
+  const root = path.join(__dirname, "..");
+  const pages = [
+    "index.html",
+    "product.html",
+    "how-it-works.html",
+    "installation.html",
+    "products.html",
+    "terms.html",
+    "privacy.html",
+    "shipping-and-returns.html"
+  ];
+  const titles = pages.map((name) => {
+    const html = fs.readFileSync(path.join(root, name), "utf8");
+    assert.match(html, /lang="en-ZA"/);
+    assert.match(html, /js\/seo\.js/);
+    assert.doesNotMatch(html, /name="robots" content="noindex/);
+    const title = html.match(/<title>([^<]+)<\/title>/);
+    const description = html.match(/<meta name="description" content="([^"]+)"/);
+    assert.ok(title && title[1].length > 10);
+    assert.ok(description && description[1].length > 40);
+    return title[1];
+  });
+  assert.equal(new Set(titles).size, titles.length);
+  const cart = fs.readFileSync(path.join(root, "cart.html"), "utf8");
+  const checkout = fs.readFileSync(path.join(root, "checkout.html"), "utf8");
+  const owner = fs.readFileSync(path.join(root, "owner", "orders.html"), "utf8");
+  assert.match(cart, /noindex, follow/);
+  assert.match(checkout, /noindex, follow/);
+  assert.match(owner, /noindex, nofollow/);
+  const sitemap = fs.readFileSync(path.join(root, "sitemap.xml"), "utf8");
+  assert.match(sitemap, /product\.html/);
+  assert.match(sitemap, /products\.html/);
+  assert.doesNotMatch(sitemap, /cart\.html|checkout\.html|owner\//);
+  const catalogue = fs.readFileSync(path.join(__dirname, "catalogue.js"), "utf8");
+  assert.match(catalogue, /"@type": "Product"/);
+  assert.match(catalogue, /"@type": "Offer"/);
+  assert.doesNotMatch(catalogue, /aggregateRating|review/);
+});
+
+test("cart items show the catalogue image beside the existing controls", () => {
+  const page = fs.readFileSync(path.join(__dirname, "cart-page.js"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");
+  assert.match(page, /image_url/);
+  assert.match(page, /\/media\/products\//);
+  assert.match(page, /product-placeholder\.svg/);
+  assert.match(page, /cart-thumb/);
+  assert.match(page, /Line total /);
+  assert.match(css, /\.cart-thumb \{[\s\S]*width: 3\.75rem;[\s\S]*height: 3\.75rem;[\s\S]*object-fit: cover;/);
+  assert.match(css, /@media \(min-width: 48rem\) \{[\s\S]*\.cart-thumb \{[\s\S]*width: 4\.5rem;[\s\S]*height: 4\.5rem;/);
+});

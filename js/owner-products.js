@@ -422,59 +422,6 @@
     });
   }
 
-  function renderReadiness(report) {
-    const host = document.querySelector("[data-readiness-list]");
-    const status = document.querySelector("[data-readiness-status]");
-    if (!host || !status) {
-      return;
-    }
-    host.replaceChildren();
-    if (report.checkout_simulation_enabled) {
-      setStatus(status, "Simulated checkout is enabled on this development server. Orders placed there are test data. Real checkout is not enabled.");
-    } else {
-      setStatus(status, report.checkout_enabled ? "" : "Checkout is not enabled.");
-    }
-    report.items.forEach((item) => {
-      const row = document.createElement("li");
-      const name = document.createElement("strong");
-      name.textContent = item.label;
-      const state = document.createElement("span");
-      state.textContent = item.ready ? "Ready" : "Missing";
-      const detail = document.createElement("p");
-      detail.textContent = item.detail;
-      row.append(name, state, detail);
-      host.append(row);
-    });
-  }
-
-  function loadReadiness() {
-    const status = document.querySelector("[data-readiness-status]");
-    const retry = document.querySelector("[data-readiness-retry]");
-    setStatus(status, "Loading checklist.");
-    if (retry) {
-      retry.hidden = true;
-    }
-    api("/api/v1/admin/readiness").then(async (response) => {
-      if (response.status === 401) {
-        window.location.assign("login.html");
-        return;
-      }
-      if (!response.ok) {
-        setStatus(status, "The checklist could not be loaded.");
-        if (retry) {
-          retry.hidden = false;
-        }
-        return;
-      }
-      renderReadiness(await response.json());
-    }).catch(() => {
-      setStatus(status, "The checklist could not be loaded.");
-      if (retry) {
-        retry.hidden = false;
-      }
-    });
-  }
-
   requireOwner().then((owner) => {
     if (!owner) {
       return;
@@ -488,13 +435,6 @@
       }
       bindProductForm();
       loadProducts();
-    }
-    if (document.querySelector("[data-readiness-list]")) {
-      const retry = document.querySelector("[data-readiness-retry]");
-      if (retry) {
-        retry.addEventListener("click", loadReadiness);
-      }
-      loadReadiness();
     }
   }).catch(() => {
     setStatus(authStatus, "The sign-in service could not be reached.");

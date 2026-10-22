@@ -186,16 +186,3 @@ class ProductAuditEventView(BaseModel):
 
 class ProductAuditList(BaseModel):
     events: list[ProductAuditEventView]
-
-
-class ReadinessItem(BaseModel):
-    key: str
-    label: str
-    ready: bool
-    detail: str
-
-
-class ReadinessReport(BaseModel):
-    checkout_enabled: bool
-    checkout_simulation_enabled: bool
-    items: list[ReadinessItem]
