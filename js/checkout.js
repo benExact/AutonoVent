@@ -70,6 +70,7 @@
         "X-CSRF-Token": token,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(45000),
     });
   }
 
@@ -229,12 +230,22 @@
     quoteHost.replaceChildren();
     if (!body.quotes || !body.quotes.length) {
       const empty = document.createElement("p");
-      empty.textContent = "No delivery rates are available for this address.";
+      empty.textContent = "No delivery options are available for this address.";
       quoteHost.append(empty, retryButton());
       renderSummary();
       return;
     }
-    body.quotes.forEach((option) => {
+    const offered = flow.customerQuotes(body.quotes);
+    body = Object.assign({}, body, { quotes: offered });
+    selectedCode = flow.selectionAfterQuote(selectedCode, offered);
+    if (!offered.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "No delivery options are available for this address.";
+      quoteHost.append(empty, retryButton());
+      renderSummary();
+      return;
+    }
+    offered.forEach((option) => {
       const card = document.createElement("label");
       card.className = "quote-card";
       const input = document.createElement("input");
@@ -256,9 +267,8 @@
       }
       quoteHost.append(card);
     });
-    if (selectedCode && !body.quotes.some((option) => option.service_code === selectedCode)) {
-      selectedCode = "";
-      setStatus("The previous delivery option is no longer available. Choose one of the current rates.");
+    if (!offered.some((option) => option.service_code === "ECO")) {
+      setStatus("Economy is unavailable for this address. Choose one of the current delivery options.");
     }
     if (body.label) {
       const note = document.createElement("p");
@@ -284,6 +294,7 @@
     text.textContent = message;
     quoteHost.append(text, retryButton());
     renderSummary();
+    setStatus(message);
   }
 
   function requestRates(force) {
@@ -306,7 +317,7 @@
     quoteRequest = requestId;
     inFlightKey = key;
     quoteHost.setAttribute("aria-busy", "true");
-    setStatus(shippingQuotes === "shiplogic" ? "Checking ShipLogic sandbox delivery rates." : "Checking delivery rates.");
+    setStatus("Checking delivery options…");
     csrf()
       .then((token) => post("/api/v1/checkout/quotes", { delivery: deliveryPayload(), lines: linePayload() }, token))
       .then(async (response) => {
@@ -322,19 +333,20 @@
         quoteFetchedAt = Date.now();
         renderRates(body);
         quoteHost.removeAttribute("aria-busy");
-        if (!body.quotes || !body.quotes.length) {
-          setStatus("No delivery rates are available for this address. No delivery price has been estimated.");
+        if (!body.quotes || !flow.customerQuotes(body.quotes).length) {
+          setStatus("No delivery options are available for this address.");
           return;
         }
-        setStatus("Choose a delivery option. The server checks the price again before payment.");
+        if (!flow.customerQuotes(body.quotes).some((option) => option.service_code === "ECO")) {
+          return;
+        }
+        setStatus("Economy is selected. You can choose another available delivery option.");
       })
       .catch(() => {
         if (requestId !== quoteRequest) {
           return;
         }
-        showRateError(shippingQuotes === "shiplogic"
-          ? "ShipLogic sandbox rates could not be loaded. No delivery price has been estimated."
-          : "Delivery rates could not be loaded. No delivery price has been estimated.");
+        showRateError("We couldn't load delivery options. Please try again.");
       })
       .finally(() => {
         if (inFlightKey === key) {
@@ -361,11 +373,11 @@
     const summary = document.createElement("div");
     summary.className = "notice";
     const title = document.createElement("p");
-    title.textContent = order.label + " " + order.order_number;
+    title.textContent = "Order " + order.order_number;
     const amounts = document.createElement("p");
     amounts.textContent = "Subtotal " + money(order.subtotal_cents) + ". Delivery " + money(order.shipping_cents) + ". Total " + money(order.total_cents) + ".";
     const payment = document.createElement("p");
-    payment.textContent = "Payment " + order.payment_status + ". Fulfilment " + order.fulfilment_status + ". " + order.payment_label;
+    payment.textContent = "Payment " + order.payment_status + ". Fulfilment " + order.fulfilment_status + ".";
     summary.append(title, amounts, payment);
     if (order.payment_reference) {
       const reference = document.createElement("p");
@@ -373,10 +385,13 @@
       summary.append(reference);
     }
     paymentHost.append(summary);
+    if (order.payment_status !== "paid") {
+      const pending = document.createElement("p");
+      pending.textContent = "The order stays unpaid until payment is verified.";
+      summary.append(pending);
+    }
     if (order.payment_status === "paid") {
-      setStatus(checkoutMode === "sandbox"
-        ? "PayFast confirmed this sandbox payment. It is not a live sale."
-        : "Simulated payment succeeded. This order is test data and is not a PayFast payment.");
+      setStatus("Payment has been verified.");
       const done = document.createElement("a");
       done.className = "button button--primary";
       done.href = "products.html";
@@ -391,48 +406,41 @@
     if (checkoutMode === "sandbox") {
       const returned = new URLSearchParams(window.location.search).get("payment");
       if (returned === "return") {
-        setStatus("You have returned from PayFast. This order stays unpaid until the sandbox notification is verified.");
+        setStatus("You have returned from payment. This order stays unpaid until the payment is verified.");
       } else if (returned === "cancel") {
-        setStatus("The PayFast sandbox payment was cancelled. The order is not paid.");
+        setStatus("The payment was cancelled. The order is not paid.");
       } else {
-        setStatus("Opening the PayFast sandbox. Returning to this page does not confirm payment.");
-        startPayfast(order.id);
+        setStatus("The order stays unpaid until payment is verified.");
       }
       const retry = document.createElement("button");
       retry.className = "button button--secondary";
       retry.type = "button";
-      retry.textContent = "Open PayFast sandbox again";
+      retry.textContent = "Continue to payment";
       retry.addEventListener("click", () => startPayfast(order.id));
       paymentHost.append(retry);
       return;
     }
-    const actions = document.createElement("div");
-    actions.className = "button-row";
-    [
-      ["success", "Simulate successful payment"],
-      ["failure", "Simulate failed payment"],
-      ["cancel", "Cancel simulated payment"],
-    ].forEach((pair) => {
-      const button = document.createElement("button");
-      button.className = pair[0] === "success" ? "button button--primary" : "button button--secondary";
-      button.type = "button";
-      button.textContent = pair[1];
-      button.addEventListener("click", () => pay(order.id, pair[0], button));
-      actions.append(button);
-    });
-    paymentHost.append(actions);
-    setStatus("Choose a simulated payment result. A failed or cancelled payment does not mark the order paid.");
+    setStatus("Payment is temporarily unavailable. The order is not paid.");
   }
 
   function startPayfast(orderId) {
-    csrf()
+    return csrf()
       .then((token) => post("/api/v1/checkout/orders/" + orderId + "/payfast", {}, token))
       .then(async (response) => {
         const body = await response.json().catch(() => null);
-        if (!response.ok || !body || !flow.payfastActionAllowed(body.action) || !body.fields) {
-          setStatus(detailMessage(body) || "PayFast sandbox is not available. The order is not paid.");
+        const attempt = flow.paymentAttempt({
+          ok: response.ok,
+          detail: response.ok ? "Payment is temporarily unavailable." : detailMessage(body),
+          action: body && body.action,
+          fields: body && body.fields,
+        });
+        if (!attempt.redirect) {
+          setStatus(attempt.message);
+          releasePay();
           return;
         }
+        form.hidden = true;
+        form.style.display = "none";
         const redirect = document.createElement("form");
         redirect.method = "post";
         redirect.action = body.action;
@@ -446,34 +454,17 @@
         document.body.append(redirect);
         redirect.submit();
       })
-      .catch(() => setStatus("The PayFast sandbox could not be opened. The order is not paid."));
+      .catch((error) => {
+        const timedOut = error && (error.name === "TimeoutError" || error.name === "AbortError");
+        setStatus(timedOut ? "The request timed out. The order is not paid." : "Payment could not be opened. The order is not paid.");
+        releasePay();
+      });
   }
 
-  function pay(orderId, outcome, button) {
-    const storageKey = "autonovent-simulated-payment-" + orderId + "-" + outcome;
-    let key = window.sessionStorage.getItem(storageKey);
-    if (!key) {
-      key = window.crypto.randomUUID() + window.crypto.randomUUID();
-      key = key.replace(/-/g, "").slice(0, 32);
-      window.sessionStorage.setItem(storageKey, key);
-    }
-    button.disabled = true;
-    csrf()
-      .then((token) => post("/api/v1/checkout/orders/" + orderId + "/payment", { outcome: outcome, idempotency_key: key }, token))
-      .then(async (response) => {
-        const body = await response.json().catch(() => null);
-        if (!response.ok) {
-          setStatus(detailMessage(body));
-          button.disabled = false;
-          return;
-        }
-        rememberOrder(body);
-        renderPayment(body);
-      })
-      .catch(() => {
-        setStatus("The simulated payment could not be reached.");
-        button.disabled = false;
-      });
+  function restoreAfterFailure(error) {
+    const timedOut = error && (error.name === "TimeoutError" || error.name === "AbortError");
+    setStatus(timedOut ? "The request timed out. The order is not paid." : "The order could not be saved.");
+    releasePay();
   }
 
   const draftKey = "autonovent-checkout-draft";
@@ -572,6 +563,10 @@
       scheduleRates();
       return;
     }
+    if (!flow.paymentAvailable(checkoutMode)) {
+      setStatus("Payment is temporarily unavailable.");
+      return;
+    }
     if (!submitLock.tryLock()) {
       return;
     }
@@ -581,7 +576,7 @@
       button.textContent = "Opening payment…";
     }
     const data = new FormData(form);
-    setStatus(checkoutMode === "sandbox" ? "Saving the order before the PayFast sandbox payment." : "Saving the simulated order.");
+    setStatus("Saving the order before payment.");
     csrf()
       .then((token) => post("/api/v1/checkout/orders", {
         idempotency_key: orderKey(),
@@ -598,26 +593,22 @@
       .then(async (response) => {
         const body = await response.json().catch(() => null);
         if (!response.ok) {
-          setStatus(detailMessage(body));
+          const detail = detailMessage(body);
+          setStatus(detail === "Payment is temporarily unavailable." ? flow.paymentFailureMessage(detail) : detail);
           releasePay();
           if (response.status === 409) {
             window.sessionStorage.removeItem(pendingKey);
           }
-          if (response.status === 422) {
+          if (response.status === 422 && detail !== "Payment is temporarily unavailable.") {
             clearQuote();
             scheduleRates();
           }
           return;
         }
-        form.hidden = true;
-        form.style.display = "none";
         rememberOrder(body);
-        renderPayment(body);
+        return startPayfast(body.id);
       })
-      .catch(() => {
-        setStatus(checkoutMode === "sandbox" ? "The order could not be saved." : "The simulated order could not be placed.");
-        releasePay();
-      });
+      .catch((error) => restoreAfterFailure(error));
   });
 
   function showCart() {
@@ -653,31 +644,34 @@
         setStatus("Checkout is not enabled.");
         return;
       }
-      if (banner && checkoutMode === "simulation") {
-        banner.textContent = shippingQuotes === "shiplogic"
-          ? "Simulated test checkout. Delivery rates are ShipLogic sandbox prices and include VAT. Payments are not PayFast payments. No card details are collected."
-          : "Simulated test checkout. Delivery quotes are not ShipLogic prices. Payments are not PayFast payments. No card details are collected.";
+      if (banner) {
+        banner.textContent = flow.paymentAvailable(checkoutMode)
+          ? "Delivery prices include VAT. Returning from payment does not mark the order paid."
+          : "Payment is temporarily unavailable.";
       }
-      if (checkoutMode === "sandbox") {
-        if (banner) {
-          banner.textContent = "PayFast sandbox checkout. Delivery rates are ShipLogic sandbox prices and include VAT. Returning from PayFast does not mark the order paid.";
-        }
-        if (paymentNote) {
-          paymentNote.textContent = "Pay Now continues to the PayFast sandbox. Returning from PayFast does not mark the order paid. Read the Privacy Notice before you continue.";
-        }
+      if (paymentNote) {
+        paymentNote.textContent = "Pay Now does not mark the order paid. Read the Privacy Notice before you continue.";
+      }
+      const payButton = form.querySelector("[data-place-order]");
+      if (payButton && !flow.paymentAvailable(checkoutMode)) {
+        payButton.disabled = true;
       }
       return fetch(endpoint + "/api/v1/products", { headers: { Accept: "application/json" } })
         .then((response) => response.json())
         .then((products) => {
           catalogue = products && Array.isArray(products.products) ? products.products : [];
           const pending = readPending();
-          if (pending && pending.order) {
+          const returned = new URLSearchParams(window.location.search).get("payment");
+          if (pending && pending.order && (returned === "return" || returned === "cancel" || pending.order.payment_status === "paid")) {
             form.hidden = true;
             form.style.display = "none";
             renderPayment(pending.order);
             return;
           }
           showCart();
+          if (pending && pending.order) {
+            setStatus("The saved order stays unpaid until payment is verified.");
+          }
         });
     })
     .catch(() => setStatus("Checkout could not be loaded."));

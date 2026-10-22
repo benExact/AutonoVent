@@ -5,6 +5,7 @@ Card numbers are never accepted or stored.
 """
 
 import hashlib
+import hmac
 import ipaddress
 from collections.abc import Mapping
 from decimal import Decimal, ROUND_HALF_UP
@@ -14,6 +15,7 @@ import httpx
 
 SANDBOX_PROCESS_URL = "https://sandbox.payfast.co.za/eng/process"
 SANDBOX_VALIDATE_URL = "https://sandbox.payfast.co.za/eng/query/validate"
+ITN_PROXY_HEADER = "x-autonovent-itn-proxy"
 CHECKOUT_FIELD_ORDER = (
     "merchant_id",
     "merchant_key",
@@ -80,6 +82,23 @@ def signature(fields: Mapping[str, str], passphrase: str, *, order: tuple[str, .
     return hashlib.md5("&".join(parts).encode()).hexdigest()
 
 
+def require_sandbox_configuration(
+    *,
+    merchant_id: str,
+    merchant_key: str,
+    notify_url: str,
+    return_url: str,
+    cancel_url: str,
+) -> None:
+    if not merchant_id.strip() or not merchant_key.strip():
+        raise PayfastConfigurationError("PayFast sandbox merchant details are not configured.")
+    if not notify_url.lower().startswith("https://"):
+        raise PayfastConfigurationError("PayFast needs an https notification URL.")
+    for label, url in (("return", return_url), ("cancel", cancel_url)):
+        if not url.strip().lower().startswith(("http://", "https://")):
+            raise PayfastConfigurationError(f"PayFast needs an absolute {label} URL.")
+
+
 def checkout_fields(
     *,
     merchant_id: str,
@@ -96,13 +115,13 @@ def checkout_fields(
     amount_cents: int,
     item_name: str,
 ) -> dict[str, str]:
-    if not merchant_id.strip() or not merchant_key.strip():
-        raise PayfastConfigurationError("PayFast sandbox merchant details are not configured.")
-    if not notify_url.lower().startswith("https://"):
-        raise PayfastConfigurationError("PayFast needs an https notification URL.")
-    for label, url in (("return", return_url), ("cancel", cancel_url)):
-        if not url.strip().lower().startswith(("http://", "https://")):
-            raise PayfastConfigurationError(f"PayFast needs an absolute {label} URL.")
+    require_sandbox_configuration(
+        merchant_id=merchant_id,
+        merchant_key=merchant_key,
+        notify_url=notify_url,
+        return_url=return_url,
+        cancel_url=cancel_url,
+    )
     fields = {
         "merchant_id": merchant_id.strip(),
         "merchant_key": merchant_key.strip(),
@@ -132,12 +151,21 @@ def itn_parameter_string(pairs: list[tuple[str, str]]) -> str:
     return "&".join(parts)
 
 
+def constant_time_text_equal(left: str, right: str) -> bool:
+    left_bytes = left.encode()
+    right_bytes = right.encode()
+    if len(left_bytes) != len(right_bytes):
+        hmac.compare_digest(left_bytes, left_bytes)
+        return False
+    return hmac.compare_digest(left_bytes, right_bytes)
+
+
 def itn_signature_matches(parameter_string: str, passphrase: str, received: str) -> bool:
     signed = parameter_string
     if passphrase.strip():
         signed = f"{parameter_string}&passphrase={payfast_encode(passphrase.strip())}"
     expected = hashlib.md5(signed.encode()).hexdigest()
-    return expected == received.strip().lower()
+    return constant_time_text_equal(expected, received.strip().lower())
 
 
 def ip_is_payfast(value: str) -> bool:

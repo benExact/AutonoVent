@@ -76,14 +76,14 @@
             <li>Registration number: [Company registration number — to be confirmed]</li>
             <li>VAT number: [VAT number — to be confirmed]</li>
           </ul>
-          <p>The checkout in this development website can place a simulated test order. A simulated payment is not a live sale and is not a PayFast payment. No courier booking is made. Before live selling starts, the business must replace the simulated payment and simulated delivery amounts with confirmed commercial arrangements.</p>
+          <p>Checkout shows the product price and the delivery charge before you pay. Submitting checkout does not by itself book a courier shipment. An order stays unpaid until the payment provider verifies the payment. Returning from the payment page does not by itself mark the order paid.</p>
 
           <h2 id="definitions">2. Definitions</h2>
           <ul>
             <li><strong>Autonovent</strong> means the canopy air vent offered on this website.</li>
             <li><strong>Business</strong> means the seller identified above, once those details are confirmed.</li>
             <li><strong>Order</strong> means a request to buy one or more products, recorded by the website.</li>
-            <li><strong>Simulated checkout</strong> means the development checkout that calculates a test delivery amount and a test payment result. It does not take a card payment and does not book a courier.</li>
+            <li><strong>Payment confirmation</strong> means the payment provider has verified the payment for that order. A return to this website is not payment confirmation.</li>
             <li><strong>Terms version</strong> means the identifier shown at the top of this page. The current draft identifier is v1.0-draft.</li>
           </ul>
 
@@ -94,22 +94,21 @@
           <h2 id="pricing">4. Pricing, currency, taxes and pricing errors</h2>
           <p>Prices are in South African rand. The price that applies to an order is the price stored by the server when the order is created. A price typed or changed in the browser is not accepted. The delivery amount is also calculated by the server and shown before you place the order.</p>
           <p>Whether advertised prices include VAT has not been confirmed. The business must state the VAT treatment before live orders are taken.</p>
-          <p>If a price on the website is obviously incorrect, the business may refuse or cancel the order before the goods are dispatched and refund any money actually received. A simulated test payment is not money received.</p>
+          <p>If a price on the website is obviously incorrect, the business may refuse or cancel the order before the goods are dispatched and refund any money actually received.</p>
 
           <h2 id="orders">5. Order submission and order acceptance</h2>
           <p>Adding a product to the cart does not create an order. You place an order by submitting checkout after you have accepted the current terms. The website records that acceptance, the terms version, and the time of acceptance in UTC against that order. Opening this page does not count as acceptance.</p>
-          <p>Submitting the form is your offer to buy on these terms. The business accepts a live order only when it confirms the order. In simulated checkout, the website creates a test order and a test payment result. That result is not acceptance of a live sale.</p>
+          <p>Submitting the form is your offer to buy on these terms. The business accepts an order when it confirms the order. A payment result counts only after the payment provider has verified the payment.</p>
           <p>The business may refuse an order, including where the product is unavailable, the address is outside South Africa, or the details are incomplete. Stock is not reserved by the cart.</p>
 
           <h2 id="payment">6. Payment processing and payment confirmation</h2>
-          <p>Simulated checkout does not collect a card number. A successful simulated result is labelled as a simulated payment. It uses the provider name “simulated” and a reference that starts with “sim-”. Accepting these terms does not turn a simulated payment into a real payment. It is not a PayFast payment.</p>
-          <p>A live payment provider has not been confirmed. Until one is appointed, this website must not be used to take real payment. When a live provider is used, the business will tell you who processes the payment and will confirm an order only after that provider reports a successful payment, unless the business has agreed another method in writing.</p>
-          <p>A failed or cancelled simulated payment leaves the order unpaid.</p>
+          <p>Checkout does not ask you to type a card number into this website. Payment is handled by the payment provider. The order stays unpaid until that provider verifies the payment. A failed or cancelled payment leaves the order unpaid.</p>
+          <p>A provider for ordinary live sales has not been confirmed. Until that is confirmed and stated here, this website must not be used to take a real payment. When a live provider is used, the business will tell you who processes the payment and will treat an order as paid only after that provider verifies the payment.</p>
 
           <h2 id="delivery">7. Delivery areas, estimates, charges and risk</h2>
           <p>Delivery is offered to South African addresses only. The checkout asks for a street address, unit or complex details where you have them, suburb or local area, city, province, postal code and country. A suggested address is only an aid. You must check it. The suggestion is not proof that the address can be delivered to.</p>
-          <p>The delivery amount shown at checkout is the amount stored on the order. In the current development checkout those amounts are simulated test rates. They are not a courier’s price, and the checkout does not book a shipment or call a courier.</p>
-          <p>A delivery time, a dispatch cutoff and a live tracking service have not been confirmed. Do not rely on a delivery date unless the business states one for your order. If email delivery is configured, the website may email you when a simulated or recorded payment is confirmed and when the fulfilment status changes. Those messages describe the order status. They are not a courier tracking service, and a tracking number is included only when one has actually been stored for the shipment.</p>
+          <p>The delivery amount shown at checkout is the amount stored on the order. It is included once. Checkout does not book a courier shipment. A delivery window is shown only when the delivery quote includes one.</p>
+          <p>A standing delivery promise and a live tracking service have not been confirmed. Do not rely on a delivery date unless it is shown for your order from the delivery quote, or the business states one. If email is configured, the website may email you when a payment is verified and when the fulfilment status changes. Those messages describe the order. They are not a courier tracking service, and a tracking number is included only when one has actually been stored for the shipment.</p>
           <p>Risk in the goods passes as required by the Consumer Protection Act and any other law that applies. These terms do not try to move that risk to you earlier than the law allows.</p>
 
           <h2 id="customer">8. Your contact and delivery details</h2>
@@ -121,7 +120,7 @@
 
           <h2 id="returns">10. Cancellations, returns, refunds and defective or damaged products</h2>
           <p>A cancellation window, a change-of-mind return period, a restocking fee and a warranty period have not been confirmed. Those decisions must be made and published before live orders are taken. This draft does not invent them.</p>
-          <p>You may ask the business to cancel an order that has not been dispatched. Whether that cancellation is accepted, and whether any amount is kept, has not been confirmed. An unpaid simulated order can be left unpaid.</p>
+          <p>You may ask the business to cancel an order that has not been dispatched. Whether that cancellation is accepted, and whether any amount is kept, has not been confirmed. An unpaid order can be left unpaid.</p>
           <p>If a product is defective, damaged, or not what you agreed to buy, your rights under the Consumer Protection Act remain available. The business must not require you to waive those rights. The return address and the practical steps for sending a product back have not been confirmed. Until they are, contact the business using the details below and keep the product safe.</p>
           <p>See also the draft <a href="shipping-and-returns.html">shipping and returns</a> page. If that page and these terms ever differ, these terms and the version accepted with your order prevail, and neither page can remove a right the law gives you.</p>
 

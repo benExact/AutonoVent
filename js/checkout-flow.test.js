@@ -62,7 +62,54 @@ test("Pay Now cannot be submitted twice and only the sandbox host is accepted", 
   assert.equal(flow.payfastActionAllowed(flow.sandboxProcessUrl), true);
   assert.equal(flow.payfastActionAllowed("https://www.payfast.co.za/eng/process"), false);
   assert.equal(flow.payfastActionAllowed(""), false);
+  const refused = flow.paymentAttempt({ ok: false, detail: "Payment is temporarily unavailable.", action: "", fields: null });
+  assert.equal(refused.redirect, false);
+  assert.equal(refused.message, "Payment is temporarily unavailable. The order is not paid.");
+  const accepted = flow.paymentAttempt({
+    ok: true,
+    detail: "",
+    action: flow.sandboxProcessUrl,
+    fields: { merchant_id: "10000100", amount: "10.00" },
+  });
+  assert.equal(accepted.redirect, true);
+  assert.equal(flow.paymentAttempt({ ok: true, action: "https://www.payfast.co.za/eng/process", fields: { amount: "10.00" } }).redirect, false);
   assert.equal(flow.customerName("Ada", "Lovelace"), "Ada Lovelace");
+});
+
+test("only Economy and Local Same Day Economy can be offered, with Economy selected by default", () => {
+  const quotes = [
+    { service_code: "LOF", shipping_cents: 8625, total_cents: 158625 },
+    { service_code: "ECO", shipping_cents: 9500, total_cents: 159500 },
+    { service_code: "LSE", shipping_cents: 10350, total_cents: 160350 },
+    { service_code: "LSX", shipping_cents: 56000, total_cents: 206000 },
+  ];
+  const offered = flow.customerQuotes(quotes);
+  assert.deepEqual(offered.map((option) => option.service_code), ["ECO", "LSE"]);
+  assert.equal(flow.defaultServiceCode(quotes), "ECO");
+  assert.equal(flow.selectionAfterQuote("", quotes), "ECO");
+  assert.equal(flow.selectionAfterQuote("LSE", quotes), "LSE");
+  assert.equal(flow.displayTotal(150000, offered[1]).totalCents, 160350);
+  const withoutEconomy = [{ service_code: "LSE", shipping_cents: 10350, total_cents: 160350 }];
+  assert.equal(flow.defaultServiceCode(withoutEconomy), "");
+  assert.equal(flow.selectionAfterQuote("ECO", withoutEconomy), "");
+  assert.equal(flow.paymentAvailable("sandbox"), true);
+  assert.equal(flow.paymentAvailable("simulation"), false);
+  assert.equal(flow.paymentAvailable("unavailable"), false);
+});
+
+test("customer pages do not show sandbox or simulation wording", () => {
+  const root = path.join(__dirname, "..");
+  const pages = ["checkout.html", "terms.html", "privacy.html", "shipping-and-returns.html", "index.html", "cart.html", "products.html"];
+  const banned = [/sandbox/i, /simulated/i, /test checkout/i, /ShipLogic sandbox/i];
+  pages.forEach((name) => {
+    const text = fs.readFileSync(path.join(root, name), "utf8");
+    banned.forEach((pattern) => assert.doesNotMatch(text, pattern, name));
+  });
+  const checkout = fs.readFileSync(path.join(__dirname, "checkout.js"), "utf8");
+  assert.doesNotMatch(checkout, /ShipLogic sandbox|PayFast sandbox|Simulated test|simulated payment|Simulate successful/i);
+  assert.match(checkout, /paymentFailureMessage/);
+  assert.match(checkout, /releasePay\(\)/);
+  assert.doesNotMatch(checkout, /form\.hidden = true;\s*form\.style\.display = "none";\s*rememberOrder/);
 });
 
 test("checkout markup stacks on small screens and places the summary before Pay Now", () => {

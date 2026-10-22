@@ -22,6 +22,8 @@ def capture_customer_email(monkeypatch):
     monkeypatch.setenv("PAYFAST_MERCHANT_KEY", "")
     monkeypatch.setenv("PAYFAST_PASSPHRASE", "")
     monkeypatch.setenv("PAYFAST_NOTIFY_URL", "")
+    monkeypatch.setenv("PAYFAST_FORWARDED_IP_HEADER", "")
+    monkeypatch.setenv("PAYFAST_ITN_PROXY_TOKEN", "")
     monkeypatch.setenv("SHIPLOGIC_API_TOKEN", "")
     get_settings.cache_clear()
     yield

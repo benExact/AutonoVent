@@ -111,8 +111,8 @@ def _install_shiplogic(monkeypatch, price: float = 85.00):
                 rates=[
                     ShippingRate(
                         provider_slug="shiplogic",
-                        service_level_code="STD",
-                        service_name="Standard",
+                        service_level_code="ECO",
+                        service_name="Economy",
                         total_price_cents=int(price * 100),
                         rate_id="rate-2",
                     )
@@ -178,7 +178,7 @@ def test_missing_parcel_does_not_call_shiplogic_or_invent_a_price(monkeypatch, i
         json={"delivery": _delivery(), "lines": [{"product_id": str(PRICED_ID), "quantity": 1}]},
     )
     assert response.status_code == 422
-    assert "packed parcel weight" in response.json()["detail"]
+    assert "couldn't load delivery options" in response.json()["detail"]
     assert "8500" not in response.text
 
 
@@ -201,8 +201,27 @@ def test_shiplogic_error_does_not_fall_back_to_a_simulated_rate(monkeypatch, iso
         json={"delivery": _delivery(), "lines": [{"product_id": str(PRICED_ID), "quantity": 1}]},
     )
     assert response.status_code == 503
-    assert "unavailable" in response.json()["detail"]
+    assert "couldn't load delivery options" in response.json()["detail"]
     assert "simulated" not in response.json()["detail"].lower()
+
+
+def test_missing_notify_url_rejects_the_order_before_a_delivery_quote(monkeypatch, isolated_database_url: str) -> None:
+    token = _prepare(monkeypatch, isolated_database_url)
+    monkeypatch.setenv("PAYFAST_NOTIFY_URL", "")
+    get_settings.cache_clear()
+
+    def refuse(**kwargs):
+        raise AssertionError("ShipLogic was called")
+
+    monkeypatch.setattr("app.checkout.sandbox.ShipLogicSandboxClient", refuse)
+    response = client.post(
+        "/api/v1/checkout/orders",
+        headers={"X-CSRF-Token": token},
+        json=_order("ECO", 8500),
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Payment is temporarily unavailable."
+    assert "notify" not in response.text.lower()
 
 
 def test_order_rechecks_the_amount_and_payfast_redirect_uses_the_saved_total(monkeypatch, isolated_database_url: str) -> None:
@@ -271,7 +290,7 @@ def test_itn_confirms_payment_once_and_rejects_bad_notifications(monkeypatch, is
         payload["signature"] = signed
         return client.post("/api/v1/payments/payfast/itn", data=payload, headers={"X-Forwarded-For": "197.97.145.144"})
 
-    monkeypatch.setattr("app.api.v1.checkout.source_ip", lambda peer, header, settings: "197.97.145.144")
+    monkeypatch.setattr("app.api.v1.checkout.source_ip", lambda *args, **kwargs: "197.97.145.144")
     unsigned = client.post(
         "/api/v1/payments/payfast/itn",
         data={"m_payment_id": order["order_number"], "payment_status": "COMPLETE", "amount_gross": "1585.00", "signature": "not-a-signature"},
@@ -332,7 +351,7 @@ def test_itn_confirms_payment_once_and_rejects_bad_notifications(monkeypatch, is
         assert stored.total_cents == 158500
         assert stored.fulfilment_status == "unfulfilled"
         assert len(emails) == 1
-        assert "sandbox transaction" in emails[0].text_body.lower()
+        assert "does not book a courier shipment" in emails[0].text_body.lower()
         assert shipments == []
         paid = session.scalar(select(func.count()).select_from(Payment).where(Payment.status == "paid"))
         assert paid == 1

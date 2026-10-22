@@ -183,13 +183,7 @@ def _address(order: Order) -> str:
 
 
 def _simulation_note(order: Order, *, sandbox: bool = False) -> str:
-    if order.is_simulation:
-        return "This is a simulated test order. The payment is not a PayFast payment, and the delivery amount is not a courier price."
-    if sandbox and order.shipping_provider == "bobgo":
-        return "This is a PayFast sandbox transaction. It is not a live sale, and the delivery quote is a Bob Go sandbox rate."
-    if sandbox:
-        return "This is a PayFast sandbox transaction. It is not a live sale, and the delivery quote is a ShipLogic sandbox rate."
-    return ""
+    return "This message confirms the saved order. It does not book a courier shipment."
 
 
 def _money(cents: int) -> str:

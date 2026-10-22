@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     payfast_return_url: str = ""
     payfast_cancel_url: str = ""
     payfast_forwarded_ip_header: str = ""
+    payfast_itn_proxy_token: str = ""
     collection_company: str = ""
     collection_street_address: str = ""
     collection_local_area: str = ""

@@ -1,6 +1,8 @@
 """ShipLogic and PayFast sandbox checkout. Prices come from the server and the providers."""
 
+import logging
 import uuid
+import ipaddress
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -44,7 +46,9 @@ from app.payments.payfast import (
     ip_is_payfast,
     itn_parameter_string,
     itn_signature_matches,
+    require_sandbox_configuration,
     validate_with_payfast,
+    constant_time_text_equal,
 )
 from app.shipping.shiplogic import (
     SANDBOX_BASE_URL,
@@ -55,10 +59,12 @@ from app.shipping.shiplogic import (
 )
 from app.shipping.simulated import SimulatedRate
 
+logger = logging.getLogger(__name__)
 SHIPLOGIC_PROVIDER = "shiplogic"
 PAYFAST_PROVIDER = "payfast"
-SANDBOX_LABEL = "ShipLogic sandbox rate. This is not a confirmed live courier booking."
-SANDBOX_PAYMENT_LABEL = "PayFast sandbox payment. This is not a live payment."
+CUSTOMER_SERVICE_CODES = frozenset({"ECO", "LSE"})
+CUSTOMER_PAYMENT_LABEL = "The order stays unpaid until payment is verified."
+CUSTOMER_QUOTE_PROBLEM = "We couldn't load delivery options. Please try again."
 
 
 @dataclass(frozen=True)
@@ -92,6 +98,7 @@ def place_sandbox_order(
     accept_terms: bool,
     terms_version: str,
 ) -> CheckoutResult:
+    _require_payfast_configuration(settings)
     province = _province(delivery)
     email = _email(customer_email)
     phone = _phone(customer_phone, required=True)
@@ -139,9 +146,23 @@ def place_sandbox_order(
         order=result.order,
         payment_provider=result.payment_provider,
         payment_reference=result.payment_reference,
-        label="PayFast sandbox order",
-        payment_label=SANDBOX_PAYMENT_LABEL,
+        label="Order",
+        payment_label=CUSTOMER_PAYMENT_LABEL,
     )
+
+
+def _require_payfast_configuration(settings: Settings) -> None:
+    try:
+        require_sandbox_configuration(
+            merchant_id=settings.payfast_merchant_id,
+            merchant_key=settings.payfast_merchant_key,
+            notify_url=settings.payfast_notify_url,
+            return_url=settings.payfast_return_url,
+            cancel_url=settings.payfast_cancel_url,
+        )
+    except PayfastConfigurationError:
+        logger.warning("PayFast checkout is not configured.")
+        raise CheckoutValidationError("Payment is temporarily unavailable.") from None
 
 
 def payfast_redirect(session: Session, settings: Settings, order_id: uuid.UUID) -> PayfastRedirect:
@@ -170,7 +191,8 @@ def payfast_redirect(session: Session, settings: Settings, order_id: uuid.UUID) 
             item_name=order.order_number,
         )
     except PayfastConfigurationError as exc:
-        raise CheckoutValidationError(str(exc)) from None
+        logger.warning("PayFast checkout is not configured.")
+        raise CheckoutValidationError("Payment is temporarily unavailable.") from exc
     key = f"payfast-start:{order.id}"
     existing = session.scalar(select(Payment).where(Payment.idempotency_key == key))
     if existing is None:
@@ -256,16 +278,41 @@ def missing_sandbox_configuration(settings: Settings) -> list[str]:
     return missing
 
 
-def source_ip(peer: str | None, header_value: str | None, settings: Settings) -> str:
-    if peer in {"127.0.0.1", "::1"} and settings.payfast_forwarded_ip_header.strip() and header_value:
+def source_ip(peer: str | None, header_value: str | None, proxy_token: str | None, settings: Settings) -> str:
+    peer_address = (peer or "").strip()
+    if _forwarded_payfast_ip(peer_address, header_value, proxy_token, settings):
         return header_value.strip()
-    return (peer or "").strip()
+    return peer_address
+
+
+def _forwarded_payfast_ip(peer: str, header_value: str | None, proxy_token: str | None, settings: Settings) -> bool:
+    """Trust a proxy-supplied client address only for a loopback peer that presents the gate token.
+
+    The PayFast network check still has to accept that address. A browser or tunnel client
+    cannot satisfy this by sending the header directly to the API.
+    """
+    expected = settings.payfast_itn_proxy_token
+    if peer not in {"127.0.0.1", "::1"}:
+        return False
+    if not settings.payfast_forwarded_ip_header.strip() or not expected or not header_value or not proxy_token:
+        return False
+    if not constant_time_text_equal(proxy_token, expected):
+        return False
+    candidate = header_value.strip()
+    if candidate != header_value or any(character.isspace() for character in candidate):
+        return False
+    try:
+        ipaddress.ip_address(candidate)
+    except ValueError:
+        return False
+    return True
 
 
 def _fresh_rates(settings: Settings, delivery: DeliveryAddress, province: str, priced: list[QuotedLine], subtotal: int) -> list[SimulatedRate]:
     missing = missing_sandbox_configuration(settings)
     if missing:
-        raise CheckoutValidationError("ShipLogic sandbox rates need " + ", ".join(missing) + ". No delivery price has been estimated.")
+        logger.warning("Delivery quote configuration is incomplete.")
+        raise CheckoutValidationError(CUSTOMER_QUOTE_PROBLEM)
     parcels = _parcels(settings, priced)
     try:
         quote = ShipLogicSandboxClient(
@@ -278,12 +325,13 @@ def _fresh_rates(settings: Settings, delivery: DeliveryAddress, province: str, p
             parcels=parcels,
         )
     except ShipLogicError as exc:
-        raise CheckoutUnavailable("Delivery quotes are unavailable. No delivery price has been estimated.") from exc
+        logger.warning("Delivery quote request failed.")
+        raise CheckoutUnavailable(CUSTOMER_QUOTE_PROBLEM) from exc
     options: list[SimulatedRate] = []
     for rate in quote.rates:
         service_code = rate.service_level_code
         reference = rate.rate_id
-        if len(service_code) > 80 or len(reference) > 120:
+        if service_code not in CUSTOMER_SERVICE_CODES or len(service_code) > 80 or len(reference) > 120:
             continue
         options.append(
             SimulatedRate(
@@ -299,19 +347,21 @@ def _fresh_rates(settings: Settings, delivery: DeliveryAddress, province: str, p
             )
         )
     if not options:
-        raise CheckoutUnavailable("ShipLogic returned no delivery rates. No delivery price has been estimated.")
+        raise CheckoutUnavailable("No delivery options are available for this address.")
     return options
 
 
 def _match_rate(settings, delivery, province, priced, subtotal, service_code: str, expected: int | None) -> SimulatedRate:
     cleaned = service_code.strip()
+    if cleaned not in CUSTOMER_SERVICE_CODES:
+        raise CheckoutValidationError("That delivery option is not available.")
     for rate in _fresh_rates(settings, delivery, province, priced, subtotal):
         if rate.service_code != cleaned:
             continue
         if expected is not None and expected != rate.shipping_cents:
-            raise CheckoutValidationError("The delivery amount does not match the ShipLogic sandbox quote.")
+            raise CheckoutValidationError("The delivery amount does not match the current delivery quote.")
         return rate
-    raise CheckoutValidationError("That ShipLogic sandbox delivery option is no longer available.")
+    raise CheckoutValidationError("That delivery option is no longer available.")
 
 
 def shiplogic_quotes_configured(settings: Settings) -> bool:
@@ -319,7 +369,7 @@ def shiplogic_quotes_configured(settings: Settings) -> bool:
 
 
 def quote_label(settings: Settings) -> str:
-    return SANDBOX_LABEL + " The delivery price includes VAT. " + parcel_notice(settings)
+    return "The delivery price includes VAT. " + parcel_notice(settings)
 
 
 def parcel_notice(settings: Settings) -> str:
@@ -338,7 +388,7 @@ def parcel_notice(settings: Settings) -> str:
 
 
 def _service_label(rate) -> str:
-    parts = [SANDBOX_LABEL, "VAT-inclusive price."]
+    parts = ["VAT-inclusive price."]
     if rate.collection_cut_off:
         parts.append("Collection cut-off " + _shown_time(rate.collection_cut_off) + ".")
     if rate.delivery_from and rate.delivery_to:

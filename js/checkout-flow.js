@@ -162,8 +162,53 @@
     return start + " to " + end;
   }
 
+  function customerQuotes(quotes) {
+    return (quotes || []).filter(function (option) {
+      return option && (option.service_code === "ECO" || option.service_code === "LSE");
+    });
+  }
+
+  function defaultServiceCode(quotes) {
+    return customerQuotes(quotes).some(function (option) {
+      return option.service_code === "ECO";
+    }) ? "ECO" : "";
+  }
+
+  function selectionAfterQuote(previousCode, quotes) {
+    const allowed = customerQuotes(quotes);
+    const stillThere = previousCode && allowed.some(function (option) {
+      return option.service_code === previousCode;
+    });
+    if (stillThere) {
+      return previousCode;
+    }
+    return defaultServiceCode(allowed);
+  }
+
+  function paymentAvailable(mode) {
+    return mode === "sandbox";
+  }
+
   function payfastActionAllowed(action) {
     return action === sandboxProcessUrl;
+  }
+
+  function paymentFailureMessage(detail) {
+    const message = typeof detail === "string" && detail.trim() ? detail.trim() : "Payment is temporarily unavailable.";
+    if (/not paid\.?$/i.test(message)) {
+      return message.endsWith(".") ? message : message + ".";
+    }
+    const base = message.endsWith(".") ? message.slice(0, -1) : message;
+    return base + ". The order is not paid.";
+  }
+
+  function paymentAttempt(result) {
+    const fields = result && result.fields;
+    const ready = Boolean(result && result.ok && payfastActionAllowed(result.action) && fields && Object.keys(fields).length);
+    if (ready) {
+      return { redirect: true, message: "" };
+    }
+    return { redirect: false, message: paymentFailureMessage(result && result.detail) };
   }
 
   return {
@@ -181,6 +226,12 @@
     canSubmit: canSubmit,
     createSubmitLock: createSubmitLock,
     deliveryEstimate: deliveryEstimate,
+    customerQuotes: customerQuotes,
+    defaultServiceCode: defaultServiceCode,
+    selectionAfterQuote: selectionAfterQuote,
+    paymentAvailable: paymentAvailable,
     payfastActionAllowed: payfastActionAllowed,
+    paymentFailureMessage: paymentFailureMessage,
+    paymentAttempt: paymentAttempt,
   };
 });

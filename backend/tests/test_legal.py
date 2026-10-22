@@ -38,8 +38,9 @@ def test_legal_pages_are_drafts_with_placeholders() -> None:
     assert "has not been confirmed" in terms
     assert "Consumer Protection Act" in terms
     assert "Protection of Personal Information Act" in privacy
-    assert "simulated" in terms.lower()
-    assert "not a PayFast payment" in terms
+    assert "stays unpaid until the payment provider verifies" in terms
+    assert "sandbox" not in terms.lower()
+    assert "simulated" not in terms.lower()
     for page in (terms, privacy, shipping):
         lowered = page.lower()
         for phrase in BANNED:

@@ -197,7 +197,7 @@ def test_paid_simulation_queues_one_confirmation_and_capture_does_not_open_smtp(
     assert "payment is confirmed" in rows[0].text_body.lower() or "Payment confirmed" in rows[0].html_body
     assert "R1,500.00" in rows[0].text_body
     assert "R85.00" in rows[0].text_body
-    assert "simulated test order" in rows[0].text_body.lower()
+    assert "does not book a courier shipment" in rows[0].text_body.lower()
     assert len(CAPTURED) == 1
     assert "<html" in rows[0].html_body.lower()
 

@@ -110,8 +110,8 @@ def test_same_day_service_is_omitted_after_its_collection_cut_off() -> None:
                     "rate": 86.25,
                     "service_level": {
                         "id": 212572,
-                        "code": "LSF",
-                        "name": "Local Sameday Flyer",
+                        "code": "LSE",
+                        "name": "Local Same Day Economy",
                         "collection_cut_off_time": "2020-01-01T10:30:00+02:00",
                         "delivery_date_from": "2020-01-01T09:00:00+02:00",
                         "delivery_date_to": "2020-01-01T15:00:00+02:00",

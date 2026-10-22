@@ -119,7 +119,15 @@ def _order(service_code: str, cents: int, postal_code: str = "2196") -> dict:
 
 def test_simulation_quotes_use_vat_inclusive_shiplogic_rates(monkeypatch, isolated_database_url: str) -> None:
     token = _prepare(monkeypatch, isolated_database_url)
-    seen = _install(monkeypatch, [[_rate("LOF", "Local Overnight Flyer", "212573", 8625), _rate("ECO", "Economy", "212570", 9500)]])
+    seen = _install(
+        monkeypatch,
+        [[
+            _rate("LOF", "Local Overnight Flyer", "212573", 8625),
+            _rate("ECO", "Economy", "212570", 9500),
+            _rate("LSE", "Local Same Day Economy", "212574", 10350),
+            _rate("LSX", "Local Sameday Express", "212575", 56000),
+        ]],
+    )
     response = client.post(
         "/api/v1/checkout/quotes",
         headers={"X-CSRF-Token": token},
@@ -133,9 +141,11 @@ def test_simulation_quotes_use_vat_inclusive_shiplogic_rates(monkeypatch, isolat
     assert "have not been confirmed" in body["label"]
     assert "187" in body["label"]
     assert [(item["service_code"], item["shipping_cents"], item["total_cents"]) for item in body["quotes"]] == [
-        ("LOF", 8625, 158625),
         ("ECO", 9500, 159500),
+        ("LSE", 10350, 160350),
     ]
+    assert "LOF" not in response.text
+    assert "LSX" not in response.text
     assert "VAT-inclusive" in body["quotes"][0]["label"]
     assert body["quotes"][0]["delivery_from"] == "2026-10-21T16:00:00+02:00"
     assert body["quotes"][0]["delivery_to"] == "2026-10-22T15:00:00+02:00"
@@ -183,9 +193,9 @@ def test_order_rejects_tampering_and_stores_the_fresh_service_id(monkeypatch, is
     tampered = client.post("/api/v1/checkout/orders", headers={"X-CSRF-Token": token}, json=_order("ECO", 1))
     assert tampered.status_code == 422
     assert "does not match" in tampered.json()["detail"]
-    missing = client.post("/api/v1/checkout/orders", headers={"X-CSRF-Token": token}, json=_order("LSF", 9500))
+    missing = client.post("/api/v1/checkout/orders", headers={"X-CSRF-Token": token}, json=_order("LOF", 9500))
     assert missing.status_code == 422
-    assert "no longer available" in missing.json()["detail"]
+    assert "not available" in missing.json()["detail"]
     created = client.post("/api/v1/checkout/orders", headers={"X-CSRF-Token": token}, json=_order("ECO", 9500))
     assert created.status_code == 200
     body = created.json()
@@ -196,6 +206,20 @@ def test_order_rejects_tampering_and_stores_the_fresh_service_id(monkeypatch, is
     assert body["shipping_cents"] == 9500
     assert body["total_cents"] == 159500
     assert body["payment_status"] == "pending"
+
+
+def test_missing_economy_does_not_invent_an_economy_price(monkeypatch, isolated_database_url: str) -> None:
+    token = _prepare(monkeypatch, isolated_database_url)
+    _install(monkeypatch, [[_rate("LSE", "Local Same Day Economy", "212574", 10350)]])
+    response = client.post(
+        "/api/v1/checkout/quotes",
+        headers={"X-CSRF-Token": token},
+        json={"delivery": _address(), "lines": [{"product_id": str(PRICED_ID), "quantity": 1}]},
+    )
+    assert response.status_code == 200
+    quotes = response.json()["quotes"]
+    assert [item["service_code"] for item in quotes] == ["LSE"]
+    assert quotes[0]["shipping_cents"] == 10350
 
 
 def test_unavailable_shiplogic_does_not_fall_back_to_simulated_prices(monkeypatch, isolated_database_url: str) -> None:

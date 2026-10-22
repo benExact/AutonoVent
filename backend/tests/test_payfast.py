@@ -81,6 +81,9 @@ def test_itn_signature_rejects_a_changed_amount() -> None:
         ]
     )
     assert not itn_signature_matches(changed, "secret", signed)
+    assert itn_signature_matches(parameter_string, "secret", signed.upper())
+    assert not itn_signature_matches(parameter_string, "secret", signed[:-1])
+    assert not itn_signature_matches(parameter_string, "other", signed)
 
 
 def test_payfast_source_networks() -> None:
@@ -88,6 +91,24 @@ def test_payfast_source_networks() -> None:
     assert ip_is_payfast("144.126.193.139")
     assert not ip_is_payfast("127.0.0.1")
     assert not ip_is_payfast("8.8.8.8")
+
+
+def test_forwarded_client_ip_requires_the_loopback_gate_token() -> None:
+    from types import SimpleNamespace
+
+    from app.checkout.sandbox import source_ip
+
+    settings = SimpleNamespace(
+        payfast_forwarded_ip_header="CF-Connecting-IP",
+        payfast_itn_proxy_token="gate-token-value",
+    )
+    assert source_ip("127.0.0.1", "197.97.145.144", "gate-token-value", settings) == "197.97.145.144"
+    assert source_ip("127.0.0.1", "197.97.145.144", "other-token", settings) == "127.0.0.1"
+    assert source_ip("8.8.8.8", "197.97.145.144", "gate-token-value", settings) == "8.8.8.8"
+    assert source_ip("127.0.0.1", "197.97.145.144, 8.8.8.8", "gate-token-value", settings) == "127.0.0.1"
+    unset = SimpleNamespace(payfast_forwarded_ip_header="CF-Connecting-IP", payfast_itn_proxy_token="")
+    assert source_ip("127.0.0.1", "197.97.145.144", "gate-token-value", unset) == "127.0.0.1"
+    assert not ip_is_payfast(source_ip("127.0.0.1", "127.0.0.1", "gate-token-value", settings))
 
 
 def test_live_payfast_and_a_non_sandbox_host_are_rejected() -> None:

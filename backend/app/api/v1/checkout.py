@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.service import CSRF_FAILED, anonymous_csrf_ok
 from app.checkout.sandbox import apply_payfast_itn, payfast_redirect, place_sandbox_order, quote_sandbox, source_ip
+from app.payments.payfast import ITN_PROXY_HEADER
 from app.checkout.service import (
     PAYMENT_LABEL,
     CheckoutConflict,
@@ -240,7 +241,7 @@ def checkout_payfast(
 ) -> PayfastSessionView:
     _csrf(request)
     if settings.checkout_mode != "sandbox":
-        raise HTTPException(status_code=404, detail="PayFast sandbox checkout is not available.")
+        raise HTTPException(status_code=404, detail="Payment is temporarily unavailable.")
     try:
         redirect = payfast_redirect(session, settings, order_id)
     except CheckoutNotFound as exc:
@@ -257,15 +258,21 @@ async def payfast_itn(request: Request, session: Session = Depends(get_session))
     try:
         settings = get_settings()
     except ValidationError:
-        raise HTTPException(status_code=404, detail="PayFast sandbox checkout is not available.") from None
+        raise HTTPException(status_code=404, detail="Payment is temporarily unavailable.") from None
     if settings.checkout_mode != "sandbox":
-        raise HTTPException(status_code=404, detail="PayFast sandbox checkout is not available.")
+        raise HTTPException(status_code=404, detail="Payment is temporarily unavailable.")
     pairs = parse_qsl((await request.body()).decode(), keep_blank_values=True, encoding="utf-8")
     peer = request.client.host if request.client is not None else ""
     header_name = settings.payfast_forwarded_ip_header.strip()
     forwarded = request.headers.get(header_name) if header_name else None
+    proxy_token = request.headers.get(ITN_PROXY_HEADER)
     try:
-        apply_payfast_itn(session, settings, pairs=pairs, source_ip=source_ip(peer, forwarded, settings))
+        apply_payfast_itn(
+            session,
+            settings,
+            pairs=pairs,
+            source_ip=source_ip(peer, forwarded, proxy_token, settings),
+        )
     except CheckoutUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except CheckoutError:

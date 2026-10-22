@@ -109,7 +109,7 @@ def quote_delivery(
             subtotal_cents=subtotal,
             lines=priced,
             rates=rates,
-            label=quote_label(settings) + " Payment remains a simulated test payment.",
+            label=quote_label(settings),
         )
     rates = _courier(settings).quote(region=province)
     return QuoteResult(currency="ZAR", subtotal_cents=subtotal, lines=priced, rates=rates)
