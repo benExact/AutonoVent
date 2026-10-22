@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.audit import ProductAuditEvent
 from app.models.product import Product
 
-AUDITED_FIELDS = ("name", "slug", "description", "sku", "unit_price_cents", "currency", "active")
+AUDITED_FIELDS = ("name", "slug", "description", "sku", "unit_price_cents", "currency", "active", "image_filename")
 
 
 class ProductError(Exception):

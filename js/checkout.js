@@ -392,6 +392,10 @@
     }
     if (order.payment_status === "paid") {
       setStatus("Payment has been verified.");
+      const banner = document.querySelector("[data-checkout-banner]");
+      if (banner) {
+        banner.textContent = "Payment has been verified.";
+      }
       const done = document.createElement("a");
       done.className = "button button--primary";
       done.href = "products.html";
@@ -611,6 +615,51 @@
       .catch((error) => restoreAfterFailure(error));
   });
 
+  function refreshReturnedOrder(order) {
+    let attempts = 0;
+    let stopped = false;
+    setStatus("Checking whether the payment has been verified.");
+    function finish(fresh) {
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      window.clearInterval(timer);
+      rememberOrder(fresh);
+      renderPayment(fresh);
+    }
+    function check() {
+      if (stopped) {
+        return;
+      }
+      attempts += 1;
+      const decide = flow.paymentWatchDecision || function (attempt, status) {
+        if (status === "paid" || status === "failed" || status === "cancelled" || attempt >= 90) {
+          return "show";
+        }
+        return "wait";
+      };
+      fetch(endpoint + "/api/v1/checkout/orders/" + order.id, { headers: { Accept: "application/json" } })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((fresh) => {
+          if (!fresh || stopped) {
+            return;
+          }
+          if (decide(attempts, fresh.payment_status) === "show") {
+            finish(fresh);
+          }
+        })
+        .catch(() => {
+          if (decide(attempts, "pending") === "show") {
+            stopped = true;
+            window.clearInterval(timer);
+          }
+        });
+    }
+    const timer = window.setInterval(check, flow.paymentWatchIntervalMs || 2000);
+    check();
+  }
+
   function showCart() {
     const lines = window.AutonoventCart.read();
     renderSummary();
@@ -639,18 +688,18 @@
       checkoutMode = body && (body.checkout_mode === "sandbox" || body.checkout_mode === "simulation") ? body.checkout_mode : "unavailable";
       shippingQuotes = body && body.shipping_quotes === "shiplogic" ? "shiplogic" : "simulated";
       const banner = document.querySelector("[data-checkout-banner]");
-      const paymentNote = document.querySelector("[data-payment-note]");
       if (checkoutMode === "unavailable") {
         setStatus("Checkout is not enabled.");
         return;
       }
       if (banner) {
-        banner.textContent = flow.paymentAvailable(checkoutMode)
-          ? "Delivery prices include VAT. Returning from payment does not mark the order paid."
-          : "Payment is temporarily unavailable.";
-      }
-      if (paymentNote) {
-        paymentNote.textContent = "Pay Now does not mark the order paid. Read the Privacy Notice before you continue.";
+        if (flow.paymentAvailable(checkoutMode)) {
+          banner.hidden = true;
+          banner.textContent = "";
+        } else {
+          banner.hidden = false;
+          banner.textContent = "Payment is temporarily unavailable.";
+        }
       }
       const payButton = form.querySelector("[data-place-order]");
       if (payButton && !flow.paymentAvailable(checkoutMode)) {
@@ -666,6 +715,9 @@
             form.hidden = true;
             form.style.display = "none";
             renderPayment(pending.order);
+            if (returned === "return" && pending.order.payment_status !== "paid") {
+              refreshReturnedOrder(pending.order);
+            }
             return;
           }
           showCart();

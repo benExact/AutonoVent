@@ -180,7 +180,7 @@
       }
       if (query.length < 3) {
         closeList();
-        setStatus(query ? "Keep typing to search, or enter the address below." : "Start typing a South African address, or enter the fields below yourself.");
+        setStatus(query ? "Keep typing to search, or enter the address below." : "");
         return;
       }
       setStatus("Searching for addresses.");

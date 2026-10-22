@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models.product import Product
+from app.products.images import public_image_url
 from app.schemas.product import CatalogueResponse, PublicProduct
 
 router = APIRouter()
@@ -72,6 +73,7 @@ def list_products(session: Session = Depends(get_catalogue_session)) -> Catalogu
                 currency=row.currency,
                 active=row.active,
                 price_is_demo=price_is_demo,
+                image_url=public_image_url(row.image_filename),
             )
         )
     return CatalogueResponse(products=products)

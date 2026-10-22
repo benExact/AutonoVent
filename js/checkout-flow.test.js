@@ -107,7 +107,12 @@ test("customer pages do not show sandbox or simulation wording", () => {
   });
   const checkout = fs.readFileSync(path.join(__dirname, "checkout.js"), "utf8");
   assert.doesNotMatch(checkout, /ShipLogic sandbox|PayFast sandbox|Simulated test|simulated payment|Simulate successful/i);
+  assert.equal(flow.paymentWatchDecision(1, "pending"), "wait");
+  assert.equal(flow.paymentWatchDecision(2, "paid"), "show");
+  assert.equal(flow.paymentWatchDecision(flow.paymentWatchLimit, "pending"), "show");
+  assert.equal(flow.paymentWatchIntervalMs, 2000);
   assert.match(checkout, /paymentFailureMessage/);
+  assert.match(checkout, /paymentWatchDecision/);
   assert.match(checkout, /releasePay\(\)/);
   assert.doesNotMatch(checkout, /form\.hidden = true;\s*form\.style\.display = "none";\s*rememberOrder/);
 });
@@ -128,4 +133,26 @@ test("checkout markup stacks on small screens and places the summary before Pay 
   assert.match(layout, /@media \(min-width: 48rem\) \{[\s\S]*\.checkout-grid--name/);
   assert.match(layout, /@media \(min-width: 64rem\) \{[\s\S]*\.checkout-summary/);
   assert.doesNotMatch(layout, /takealot/i);
+});
+
+test("product prices use rands and shop thumbnails keep their shape", () => {
+  const money = require("./money.js");
+  assert.equal(money.centsFromRands("1.00"), 100);
+  assert.equal(money.centsFromRands("1550.00"), 155000);
+  assert.equal(money.centsFromRands("1550.50"), 155050);
+  assert.equal(money.randsFromCents(155050), "1550.50");
+  assert.throws(() => money.centsFromRands("0"), /greater than R0\.00/);
+  assert.throws(() => money.centsFromRands("-1"), /two decimal places/);
+  assert.throws(() => money.centsFromRands("abc"), /two decimal places/);
+  assert.throws(() => money.centsFromRands("1550.555"), /two decimal places/);
+  const catalogue = fs.readFileSync(path.join(__dirname, "catalogue.js"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");
+  const owner = fs.readFileSync(path.join(__dirname, "..", "owner", "products.html"), "utf8");
+  assert.match(catalogue, /image_url/);
+  assert.doesNotMatch(catalogue, /autonovent-roof-sunset-card/);
+  assert.match(css, /\.product-card \.product-shot img \{[\s\S]*object-fit: cover;/);
+  assert.match(css, /@media \(min-width: 48rem\) \{[\s\S]*\.owner-product-grid/);
+  assert.match(owner, /Add Product/);
+  assert.match(owner, /name="price_rands"/);
+  assert.match(owner, />R</);
 });

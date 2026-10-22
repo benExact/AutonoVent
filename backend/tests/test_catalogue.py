@@ -20,6 +20,7 @@ PUBLIC_FIELDS = {
     "currency",
     "active",
     "price_is_demo",
+    "image_url",
 }
 
 
@@ -82,6 +83,7 @@ def test_catalogue_returns_only_priced_active_products(monkeypatch, isolated_dat
     assert product["currency"] == "ZAR"
     assert product["active"] is True
     assert product["price_is_demo"] is False
+    assert product["image_url"] is None
 
     engine = create_engine(isolated_database_url)
     with engine.begin() as connection:

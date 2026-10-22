@@ -23,7 +23,6 @@
             <li><a href="product.html">Product</a></li>
             <li><a href="how-it-works.html">How It Works</a></li>
             <li><a href="installation.html">Installation</a></li>
-            <li><a href="faq.html">FAQs</a></li>
           </ul>
           <a class="button button--primary nav-quote" href="products.html">Shop</a>
         </nav>
@@ -72,7 +71,7 @@
               <div class="field address-search">
                 <label for="address-search">Search for a delivery address</label>
                 <input id="address-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="address-suggestions" aria-describedby="address-search-status" autocomplete="off" maxlength="120">
-                <p id="address-search-status" class="field-note" data-address-status>Start typing a South African address, or enter the fields below yourself.</p>
+                <p id="address-search-status" class="field-note" data-address-status></p>
                 <ul id="address-suggestions" class="address-suggestions" role="listbox" hidden></ul>
               </div>
               <div class="field">
@@ -118,7 +117,6 @@
                 <label for="delivery-country">Country</label>
                 <input id="delivery-country" name="country" value="ZA" required maxlength="2" pattern="ZA" autocomplete="country" readonly>
               </div>
-              <p class="field-note">Delivery is limited to South Africa. A suggested address is not confirmation that it can be delivered.</p>
             </div>
             <div class="checkout-rates" data-quote-options></div>
             <aside class="checkout-summary" data-order-summary>
@@ -131,7 +129,6 @@
                 <label for="accept-terms">I have read and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms and Conditions</a>.</label>
               </div>
               <input type="hidden" name="terms_version" value="v1.0-draft">
-              <p class="field-note" data-payment-note>Pay Now does not mark the order paid. Read the <a href="privacy.html" target="_blank" rel="noopener">Privacy Notice</a> before you continue.</p>
               <button class="button button--primary" type="submit" data-place-order>Pay Now</button>
             </div>
           </form>
@@ -154,7 +151,6 @@
             <li><a href="product.html">Product</a></li>
             <li><a href="how-it-works.html">How It Works</a></li>
             <li><a href="installation.html">Installation</a></li>
-            <li><a href="faq.html">FAQs</a></li>
           </ul>
         </nav>
         <div>
@@ -177,7 +173,7 @@
     <script src="js/main.js" defer></script>
     <script src="js/cart.js" defer></script>
     <script src="js/address-search.js" defer></script>
-    <script src="js/checkout-flow.js" defer></script>
-    <script src="js/checkout.js" defer></script>
+    <script src="js/checkout-flow.js?v=20261022b" defer></script>
+    <script src="js/checkout.js?v=20261022b" defer></script>
   </body>
 </html>

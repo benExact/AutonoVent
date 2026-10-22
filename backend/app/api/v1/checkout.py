@@ -19,6 +19,7 @@ from app.checkout.service import (
     CheckoutResult,
     CheckoutUnavailable,
     CheckoutValidationError,
+    _result,
     address_from_parts,
     place_simulated_order,
     quote_delivery,
@@ -27,6 +28,7 @@ from app.checkout.service import (
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.orders.service import OrderLine
+from app.models.order import Order
 from app.schemas.checkout import (
     CheckoutOrderView,
     CheckoutStatus,
@@ -230,6 +232,28 @@ def checkout_order(
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
     return _view(result)
+
+
+@router.get("/checkout/orders/{order_id}", response_model=CheckoutOrderView)
+def checkout_order_status(
+    order_id: uuid.UUID,
+    _settings: Settings = Depends(require_checkout),
+    session: Session = Depends(get_session),
+) -> CheckoutOrderView:
+    order = session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="The order does not exist.")
+    result = _result(session, order)
+    paid = order.payment_status == "paid"
+    return _view(
+        CheckoutResult(
+            order=order,
+            payment_provider=result.payment_provider,
+            payment_reference=result.payment_reference,
+            label="Order",
+            payment_label="Payment has been verified." if paid else "The order stays unpaid until payment is verified.",
+        )
+    )
 
 
 @router.post("/checkout/orders/{order_id}/payfast", response_model=PayfastSessionView)

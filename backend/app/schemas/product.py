@@ -17,6 +17,7 @@ class PublicProduct(BaseModel):
     currency: str
     active: bool
     price_is_demo: bool = False
+    image_url: str | None = None
 
 
 class CatalogueResponse(BaseModel):

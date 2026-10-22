@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     email_max_attempts: int = 5
     address_provider: str = ""
     google_places_api_key: str = ""
+    product_image_dir: str = "var/product-images"
     courier_provider: str = ""
     payment_provider: str = ""
     payfast_mode: str = ""

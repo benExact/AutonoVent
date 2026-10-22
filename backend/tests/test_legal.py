@@ -52,7 +52,7 @@ def test_legal_pages_are_drafts_with_placeholders() -> None:
 
 
 def test_footer_and_checkout_link_to_the_legal_pages() -> None:
-    for name in ("index.html", "checkout.html", "cart.html", "products.html", "faq.html"):
+    for name in ("index.html", "checkout.html", "cart.html", "products.html", "product.html"):
         page = _page(name)
         assert 'href="terms.html"' in page
         assert 'href="privacy.html"' in page
@@ -62,7 +62,6 @@ def test_footer_and_checkout_link_to_the_legal_pages() -> None:
     assert 'target="_blank"' in checkout
     assert 'name="accept_terms"' in checkout
     assert "v1.0-draft" in checkout
-    assert "does not mark the order paid" in checkout
     script = (ROOT / "js" / "checkout.js").read_text(encoding="utf-8")
     assert "accept_terms: true" in script
     assert "Accept the Terms and Conditions before payment." in script

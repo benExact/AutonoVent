@@ -13,7 +13,7 @@ from app.db.base import Base
 class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
-        CheckConstraint("unit_price_cents IS NULL OR unit_price_cents >= 0", name="ck_products_price_nonnegative"),
+        CheckConstraint("unit_price_cents IS NULL OR unit_price_cents > 0", name="ck_products_price_positive"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -24,6 +24,7 @@ class Product(Base):
     unit_price_cents: Mapped[int | None] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="ZAR", server_default="ZAR")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    image_filename: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

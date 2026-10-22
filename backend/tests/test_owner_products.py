@@ -1,5 +1,6 @@
 """Owner product management. Fixture rows stay in the isolated database."""
 
+import base64
 import uuid
 
 from fastapi.testclient import TestClient
@@ -27,11 +28,13 @@ PRODUCT = {
 }
 
 
-def _use_database(monkeypatch, database_url: str) -> None:
+def _use_database(monkeypatch, database_url: str, image_dir: str | None = None) -> None:
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
     monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
+    if image_dir is not None:
+        monkeypatch.setenv("PRODUCT_IMAGE_DIR", image_dir)
     get_settings.cache_clear()
     reset_engine()
     engine = create_engine(database_url)
@@ -344,5 +347,105 @@ def test_product_audit_records_owner_changes_and_stays_private(monkeypatch, isol
         assert session.scalar(select(func.count()).select_from(OrderStatusEvent)) == 0
     engine.dispose()
     assert client.get(f"/api/v1/products/{product_id}/audit").status_code == 404
+    reset_engine()
+    get_settings.cache_clear()
+
+
+_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def _priced(slug: str, sku: str, **extra) -> dict:
+    body = dict(PRODUCT, slug=slug, sku=sku, active=True)
+    body.update(extra)
+    return body
+
+
+def test_rand_prices_convert_to_cents_and_invalid_prices_are_refused(monkeypatch, isolated_database_url: str) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    _owner(isolated_database_url)
+    _login()
+    expected = {"1.00": 100, "1550.00": 155000, "1550.50": 155050, "1550,50": 155050}
+    for index, (price, cents) in enumerate(expected.items()):
+        saved = _create(_priced(f"fixture-rand-{index}", f"RAND-{index}", price_rands=price))
+        assert saved.status_code == 201
+        assert saved.json()["unit_price_cents"] == cents
+    edited = client.patch(
+        f"/api/v1/admin/products/{saved.json()['id']}",
+        json={"price_rands": "10.50"},
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["unit_price_cents"] == 1050
+    assert edited.json()["slug"] == "fixture-rand-3"
+    for price in ("0", "0.00", "-1", "12.345", "abc", "1.000", "R1550", "1,550.00"):
+        refused = _create(_priced("fixture-bad-price", None, price_rands=price))
+        assert refused.status_code == 422
+    assert _create(_priced("fixture-zero-cents", None, unit_price_cents=0)).status_code == 422
+    listed = client.get("/api/v1/admin/products")
+    assert listed.status_code == 200
+    assert len(listed.json()["products"]) == len(expected)
+    reset_engine()
+    get_settings.cache_clear()
+
+
+def test_one_product_image_can_be_replaced_and_is_served_publicly(monkeypatch, isolated_database_url: str, tmp_path) -> None:
+    _use_database(monkeypatch, isolated_database_url, str(tmp_path))
+    _owner(isolated_database_url)
+    assert client.post(
+        f"/api/v1/admin/products/{uuid.uuid4()}/image",
+        files={"image": ("photo.png", _PNG, "image/png")},
+    ).status_code == 401
+    _login()
+    created = _create(_priced("fixture-image", "IMG-1", price_rands="1550.00"))
+    assert created.status_code == 201
+    product_id = created.json()["id"]
+    blocked = client.post(
+        f"/api/v1/admin/products/{product_id}/image",
+        files={"image": ("photo.png", _PNG, "image/png")},
+    )
+    assert blocked.status_code == 403
+    refused_type = client.post(
+        f"/api/v1/admin/products/{product_id}/image",
+        files={"image": ("notes.gif", b"GIF89a", "image/gif")},
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    )
+    assert refused_type.status_code == 422
+    oversized = b"\xff\xd8\xff" + (b"\x00" * (5 * 1024 * 1024))
+    refused_size = client.post(
+        f"/api/v1/admin/products/{product_id}/image",
+        files={"image": ("large.jpg", oversized, "image/jpeg")},
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    )
+    assert refused_size.status_code == 422
+    first = client.post(
+        f"/api/v1/admin/products/{product_id}/image",
+        files={"image": ("../../photo.png", _PNG, "image/png")},
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    )
+    assert first.status_code == 200
+    first_url = first.json()["image_url"]
+    assert first_url.startswith("/media/products/")
+    assert "\\" not in first_url and "photo.png" not in first_url
+    stored = client.get(first_url)
+    assert stored.status_code == 200
+    assert stored.headers["content-type"].startswith("image/png")
+    assert stored.content == _PNG
+    public = client.get("/api/v1/products")
+    assert public.json()["products"][0]["image_url"] == first_url
+    replacement = b"\xff\xd8\xff" + b"\x00" * 32
+    second = client.post(
+        f"/api/v1/admin/products/{product_id}/image",
+        files={"image": ("other.jpg", replacement, "image/jpeg")},
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    )
+    assert second.status_code == 200
+    second_url = second.json()["image_url"]
+    assert second_url != first_url
+    assert client.get(first_url).status_code == 404
+    assert client.get(second_url).content == replacement
+    assert len(list(tmp_path.iterdir())) == 1
+    assert client.get("/api/v1/admin/products").json()["products"].__len__() == 1
     reset_engine()
     get_settings.cache_clear()

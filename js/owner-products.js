@@ -9,7 +9,12 @@
   }
 
   const endpoint = base.replace(/\/$/, "");
+  const moneyInput = window.AutonoventMoney;
   let editingId = "";
+  let selectedFile = null;
+  let previewUrl = "";
+  let saving = false;
+  const maxImageBytes = 5 * 1024 * 1024;
 
   function setStatus(node, message) {
     if (node) {
@@ -32,6 +37,9 @@
       (body) => {
         if (typeof body.detail === "string") {
           return body.detail;
+        }
+        if (Array.isArray(body.detail) && body.detail[0] && typeof body.detail[0].msg === "string") {
+          return body.detail[0].msg.replace(/^Value error,\s*/, "");
         }
         return "The product could not be saved.";
       },
@@ -75,6 +83,36 @@
     });
   }
 
+  function imageSource(product) {
+    if (product && typeof product.image_url === "string" && product.image_url.indexOf("/media/products/") === 0) {
+      return endpoint + product.image_url;
+    }
+    return "../assets/images/product-placeholder.svg";
+  }
+
+  function clearPreview() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      previewUrl = "";
+    }
+    selectedFile = null;
+    const preview = document.querySelector("[data-product-preview]");
+    if (preview) {
+      preview.hidden = true;
+      preview.removeAttribute("src");
+    }
+  }
+
+  function showPreview(src, alt) {
+    const preview = document.querySelector("[data-product-preview]");
+    if (!preview) {
+      return;
+    }
+    preview.src = src;
+    preview.alt = alt;
+    preview.hidden = false;
+  }
+
   function renderProducts(products) {
     const host = document.querySelector("[data-products-list]");
     const status = document.querySelector("[data-products-status]");
@@ -87,41 +125,64 @@
       return;
     }
     setStatus(status, "");
-    const list = document.createElement("div");
-    list.className = "owner-table";
     products.forEach((product) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "owner-row";
-      const name = document.createElement("strong");
+      const card = document.createElement("article");
+      card.className = "owner-product-card";
+      const figure = document.createElement("figure");
+      figure.className = "owner-product-thumb";
+      const image = document.createElement("img");
+      image.src = imageSource(product);
+      image.alt = product.name;
+      image.width = 800;
+      image.height = 600;
+      image.loading = "lazy";
+      image.decoding = "async";
+      figure.append(image);
+      const name = document.createElement("h3");
       name.textContent = product.name;
-      const price = document.createElement("span");
+      const sku = document.createElement("p");
+      sku.textContent = product.sku ? "SKU " + product.sku : "SKU not set";
+      const price = document.createElement("p");
+      price.className = "catalogue-price";
       price.textContent = money(product.unit_price_cents);
-      const state = document.createElement("span");
+      const state = document.createElement("p");
       state.textContent = product.active ? "Active" : "Inactive";
-      button.append(name, price, state);
-      button.addEventListener("click", () => fillForm(product));
-      list.append(button);
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "button button--secondary";
+      edit.textContent = "Edit";
+      edit.addEventListener("click", () => fillForm(product));
+      card.append(figure, name, sku, price, state, edit);
+      host.append(card);
     });
-    host.append(list);
+  }
+
+  function showPanel() {
+    const panel = document.querySelector("[data-product-panel]");
+    if (panel) {
+      panel.hidden = false;
+    }
   }
 
   function fillForm(product) {
     const form = document.querySelector("[data-product-form]");
     const heading = document.querySelector("[data-product-form-heading]");
-    if (!form || !heading) {
+    if (!form || !heading || !moneyInput) {
       return;
     }
+    clearPreview();
+    form.reset();
     editingId = product.id;
     heading.textContent = "Edit product";
     form.name.value = product.name;
     form.slug.value = product.slug;
     form.description.value = product.description || "";
     form.sku.value = product.sku || "";
-    form.unit_price_cents.value = Number.isInteger(product.unit_price_cents) ? String(product.unit_price_cents) : "";
-    form.currency.value = "ZAR";
+    form.price_rands.value = moneyInput.randsFromCents(product.unit_price_cents);
     form.active.checked = product.active === true;
+    showPreview(imageSource(product), product.name);
     setStatus(document.querySelector("[data-product-save]"), "");
+    showPanel();
     loadAudit(product.id);
   }
 
@@ -164,17 +225,32 @@
   function clearForm() {
     const form = document.querySelector("[data-product-form]");
     const heading = document.querySelector("[data-product-form-heading]");
-    if (!form || !heading) {
+    const panel = document.querySelector("[data-product-panel]");
+    if (!form || !heading || !panel) {
       return;
     }
     editingId = "";
-    heading.textContent = "New product";
+    heading.textContent = "Add product";
     form.reset();
-    form.currency.value = "ZAR";
+    clearPreview();
     setStatus(document.querySelector("[data-product-save]"), "");
     const history = document.querySelector("[data-product-audit]");
     if (history) {
       history.replaceChildren();
+    }
+    panel.hidden = true;
+  }
+
+  function openNewProduct() {
+    clearForm();
+    const panel = document.querySelector("[data-product-panel]");
+    const heading = document.querySelector("[data-product-form-heading]");
+    if (heading) {
+      heading.textContent = "Add product";
+    }
+    if (panel) {
+      panel.hidden = false;
+      panel.scrollIntoView({ block: "start" });
     }
   }
 
@@ -206,32 +282,71 @@
     });
   }
 
-  function centsFromForm(value) {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
+  function chosenImage(file) {
+    if (!file) {
+      return "";
     }
-    if (!/^[0-9]+$/.test(trimmed)) {
-      throw new Error("Enter the selling price as a whole number of cents, or leave it empty.");
+    const allowed = file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp";
+    if (file.type && !allowed) {
+      return "Use a JPEG, PNG, or WebP image.";
     }
-    return Number(trimmed);
+    if (file.size > maxImageBytes) {
+      return "The image is too large. Use a JPEG, PNG, or WebP under 5 MB.";
+    }
+    return "";
   }
 
   function bindProductForm() {
     const form = document.querySelector("[data-product-form]");
     const clear = document.querySelector("[data-product-clear]");
+    const add = document.querySelector("[data-product-add]");
     const result = document.querySelector("[data-product-save]");
-    if (!form || !clear) {
+    const submit = form && form.querySelector("[data-product-submit]");
+    if (!form || !clear || !moneyInput) {
       return;
     }
+    const imageInput = form.querySelector("#product-image");
+    if (add) {
+      add.addEventListener("click", openNewProduct);
+    }
     clear.addEventListener("click", clearForm);
+    if (imageInput) {
+      imageInput.addEventListener("change", () => {
+        const file = imageInput.files && imageInput.files[0];
+        const problem = chosenImage(file);
+        if (problem) {
+          imageInput.value = "";
+          selectedFile = null;
+          setStatus(result, problem);
+          return;
+        }
+        if (!file) {
+          return;
+        }
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        selectedFile = file;
+        previewUrl = URL.createObjectURL(file);
+        showPreview(previewUrl, "Selected product image");
+        setStatus(result, "");
+      });
+    }
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      let cents;
+      if (saving) {
+        return;
+      }
+      let price;
       try {
-        cents = centsFromForm(form.unit_price_cents.value);
+        price = moneyInput.centsFromRands(form.price_rands.value);
       } catch (error) {
         setStatus(result, error.message);
+        return;
+      }
+      const imageProblem = chosenImage(selectedFile);
+      if (imageProblem) {
+        setStatus(result, imageProblem);
         return;
       }
       const body = {
@@ -239,11 +354,21 @@
         slug: form.slug.value,
         description: form.description.value,
         sku: form.sku.value,
-        unit_price_cents: cents,
+        price_rands: form.price_rands.value.trim(),
         currency: "ZAR",
         active: form.active.checked,
       };
+      if (!price) {
+        setStatus(result, "Enter a selling price greater than R0.00.");
+        return;
+      }
       const path = editingId ? "/api/v1/admin/products/" + encodeURIComponent(editingId) : "/api/v1/admin/products";
+      const file = selectedFile;
+      saving = true;
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Saving…";
+      }
       setStatus(result, "Saving.");
       api(path, {
         method: editingId ? "PATCH" : "POST",
@@ -263,11 +388,36 @@
           return;
         }
         const saved = await response.json();
+        if (!file) {
+          fillForm(saved);
+          setStatus(result, "Saved.");
+          loadProducts();
+          return;
+        }
+        const data = new FormData();
+        data.append("image", file);
+        const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/image", {
+          method: "POST",
+          headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+          body: data,
+        });
+        if (!uploaded.ok) {
+          setStatus(result, "The product was saved, but the image was not. " + await detailMessage(uploaded));
+          fillForm(saved);
+          loadProducts();
+          return;
+        }
+        fillForm(await uploaded.json());
         setStatus(result, "Saved.");
-        fillForm(saved);
         loadProducts();
       }).catch(() => {
         setStatus(result, "The product service could not be reached.");
+      }).finally(() => {
+        saving = false;
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = "Save product";
+        }
       });
     });
   }

@@ -6,7 +6,12 @@
   const retry = document.querySelector("[data-catalogue-retry]");
   const list = document.querySelector("[data-catalogue-list]");
   const baseUrl = window.AUTONOVENT_API_BASE_URL;
-  const productImage = "assets/images/optimised/autonovent-roof-sunset-card.webp";
+  function productImageSource(product) {
+    if (product && typeof product.image_url === "string" && product.image_url.indexOf("/media/products/") === 0) {
+      return baseUrl.replace(/\/$/, "") + product.image_url;
+    }
+    return "assets/images/product-placeholder.svg";
+  }
 
   if (!region || !status || !list || !retry) {
     return;
@@ -55,17 +60,18 @@
       item.id = "product-" + (product.slug || product.id);
       item.dataset.productId = product.id;
 
-      if (usesProductPhoto(product)) {
-        const figure = document.createElement("figure");
-        figure.className = "product-shot";
-        const image = document.createElement("img");
-        image.src = productImage;
-        image.width = 1266;
-        image.height = 778;
-        image.alt = product.name + " on a canopy roof at sunset, with the front intake facing forward.";
-        figure.append(image);
-        item.append(figure);
-      }
+      const figure = document.createElement("figure");
+      figure.className = "product-shot";
+      const image = document.createElement("img");
+      const source = productImageSource(product);
+      image.src = source;
+      image.width = 800;
+      image.height = 600;
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.alt = source.indexOf("/media/products/") === -1 ? "" : product.name;
+      figure.append(image);
+      item.append(figure);
 
       const name = document.createElement("h3");
       name.textContent = product.name;

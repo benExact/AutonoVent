@@ -245,6 +245,11 @@ def test_order_rechecks_the_amount_and_payfast_redirect_uses_the_saved_total(mon
     )
     assert created.status_code == 200
     order = created.json()
+    current = client.get(f"/api/v1/checkout/orders/{order['id']}")
+    assert current.status_code == 200
+    assert current.json()["payment_status"] == "pending"
+    assert current.json()["order_number"] == order["order_number"]
+    assert "customer_email" not in current.json()
     assert order["simulation"] is False
     assert order["total_cents"] == 158500
     assert order["shipping_provider"] == "shiplogic"

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
+from app.products.images import router as product_images_router
 
 
 def create_app() -> FastAPI:
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
     )
     app.include_router(v1_router, prefix="/api/v1")
+    app.include_router(product_images_router)
     return app
 
 

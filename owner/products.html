@@ -27,15 +27,18 @@
         </nav>
       </header>
       <p class="form-status" role="status" data-auth-status></p>
-      <p class="lede">A product without a selling price stays off the public catalogue. Saving a price here does not enable checkout.</p>
-      <section aria-labelledby="product-list-heading">
-        <h2 id="product-list-heading">Saved products</h2>
+      <p class="lede">A product stays off the public shop until it is active and has a selling price.</p>
+      <section class="owner-products" aria-labelledby="product-list-heading">
+        <div class="owner-section-head">
+          <h2 id="product-list-heading">Products</h2>
+          <button class="button button--primary" type="button" data-product-add>Add Product</button>
+        </div>
         <p class="form-status" role="status" data-products-status>Loading products.</p>
-        <div data-products-list></div>
+        <div class="owner-product-grid" data-products-list></div>
         <button class="button button--secondary" type="button" data-products-retry hidden>Try again</button>
       </section>
-      <section aria-labelledby="product-form-heading">
-        <h2 id="product-form-heading" data-product-form-heading>New product</h2>
+      <section class="owner-product-panel" data-product-panel hidden aria-labelledby="product-form-heading">
+        <h2 id="product-form-heading" data-product-form-heading>Add product</h2>
         <form class="enquiry-form" data-product-form>
           <div class="field">
             <label for="product-name">Name</label>
@@ -46,21 +49,28 @@
             <input id="product-slug" name="slug" type="text" maxlength="80" required>
           </div>
           <div class="field">
-            <label for="product-description">Description</label>
-            <textarea id="product-description" name="description" maxlength="4000"></textarea>
-          </div>
-          <div class="field">
             <label for="product-sku">SKU</label>
             <input id="product-sku" name="sku" type="text" maxlength="64">
           </div>
           <div class="field">
-            <label for="product-price">Selling price in cents</label>
-            <input id="product-price" name="unit_price_cents" type="text" inputmode="numeric" autocomplete="off">
-            <p class="field-note">Leave this empty until a selling price is confirmed. Do not enter a guess.</p>
+            <label for="product-price">Selling price</label>
+            <div class="price-entry">
+              <span aria-hidden="true">R</span>
+              <input id="product-price" name="price_rands" type="text" inputmode="decimal" autocomplete="off" placeholder="1550.00">
+            </div>
+            <p class="field-note">Enter the price in rands, such as 1550.00. It must be more than R0.00.</p>
           </div>
           <div class="field">
-            <label for="product-currency">Currency</label>
-            <input id="product-currency" name="currency" type="text" value="ZAR" readonly>
+            <label for="product-description">Description</label>
+            <textarea id="product-description" name="description" maxlength="4000"></textarea>
+          </div>
+          <div class="field">
+            <label for="product-image">Product image</label>
+            <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+            <p class="field-note">One JPEG, PNG, or WebP image, up to 5 MB.</p>
+            <figure class="owner-product-preview">
+              <img data-product-preview alt="" hidden>
+            </figure>
           </div>
           <div class="field">
             <label for="product-active">
@@ -69,8 +79,8 @@
             </label>
           </div>
           <div class="button-row">
-            <button class="button button--primary" type="submit">Save product</button>
-            <button class="button button--secondary" type="button" data-product-clear>Clear</button>
+            <button class="button button--primary" type="submit" data-product-submit>Save product</button>
+            <button class="button button--secondary" type="button" data-product-clear>Cancel</button>
           </div>
           <p class="form-status" role="status" data-product-save></p>
         </form>
@@ -79,6 +89,7 @@
       </section>
     </main>
     <script src="../js/config.js"></script>
+    <script src="../js/money.js"></script>
     <script src="../js/owner-products.js"></script>
   </body>
 </html>

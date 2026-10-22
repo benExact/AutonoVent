@@ -9,6 +9,8 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const debounceMs = 450;
   const quoteLifetimeMs = 5 * 60 * 1000;
+  const paymentWatchIntervalMs = 2000;
+  const paymentWatchLimit = 90;
   const sandboxProcessUrl = "https://sandbox.payfast.co.za/eng/process";
 
   function clean(value) {
@@ -202,6 +204,16 @@
     return base + ". The order is not paid.";
   }
 
+  function paymentWatchDecision(attempt, status) {
+    if (status === "paid" || status === "failed" || status === "cancelled") {
+      return "show";
+    }
+    if (attempt >= paymentWatchLimit) {
+      return "show";
+    }
+    return "wait";
+  }
+
   function paymentAttempt(result) {
     const fields = result && result.fields;
     const ready = Boolean(result && result.ok && payfastActionAllowed(result.action) && fields && Object.keys(fields).length);
@@ -214,6 +226,9 @@
   return {
     debounceMs: debounceMs,
     quoteLifetimeMs: quoteLifetimeMs,
+    paymentWatchIntervalMs: paymentWatchIntervalMs,
+    paymentWatchLimit: paymentWatchLimit,
+    paymentWatchDecision: paymentWatchDecision,
     sandboxProcessUrl: sandboxProcessUrl,
     customerName: customerName,
     addressIsValid: addressIsValid,
