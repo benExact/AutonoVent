@@ -104,7 +104,7 @@
   }
 
   if (!endpoint) {
-    status.textContent = "The product list is not configured.";
+    status.textContent = "The shop could not be reached.";
     return;
   }
 
@@ -120,6 +120,6 @@
       render();
     })
     .catch(() => {
-      status.textContent = "The cart could not load product prices.";
+      status.textContent = "Prices could not be loaded. Try again.";
     });
 })();

@@ -44,7 +44,7 @@ def list_products(session: Session = Depends(get_catalogue_session)) -> Catalogu
     demo_cents = None
     if settings is not None and settings.checkout_simulation_active:
         demo_cents = settings.checkout_simulation_demo_unit_price_cents
-    statement = select(Product).where(Product.active.is_(True))
+    statement = select(Product).where(Product.active.is_(True), Product.archived_at.is_(None))
     if demo_cents is None:
         statement = statement.where(Product.unit_price_cents.is_not(None))
     statement = statement.order_by(Product.name, Product.slug)

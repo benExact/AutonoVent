@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Omniprod | Homepage carousel</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" href="../favicon.ico" sizes="16x16">
+    <link rel="stylesheet" href="../css/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#owner-carousel">Skip to homepage carousel</a>
+    <main class="owner-portal" id="owner-carousel">
+      <header class="owner-portal__bar">
+        <a class="brand" href="../index.html" aria-label="Omniprod">
+          <img class="brand-logo" src="../assets/images/omniprod-logo.png" width="899" height="132" alt="Omniprod">
+        </a>
+        <div>
+          <p class="eyebrow">Omniprod</p>
+          <h1>Homepage carousel</h1>
+        </div>
+        <nav class="owner-portal__nav" aria-label="Owner">
+          <a href="orders.html">Orders</a>
+          <a href="products.html">Products</a>
+          <a href="carousel.html" aria-current="page">Homepage carousel</a>
+          <button class="button button--secondary" type="button" data-auth-logout hidden>Sign out</button>
+        </nav>
+      </header>
+      <p class="form-status" role="status" data-auth-status></p>
+      <section class="owner-guidance" aria-label="Image guidance">
+        <p><strong>Recommended image size: 1920 × 600 px (16:5 ratio).</strong></p>
+        <p>Use a wide landscape image.</p>
+        <p>Keep important text and product imagery near the center of the banner, with sufficient safe space around the edges.</p>
+        <p>The banner will be cropped on smaller screens.</p>
+        <p>Use WebP or optimized JPEG where possible.</p>
+        <p>Avoid uploading unnecessarily large files.</p>
+      </section>
+      <section aria-labelledby="carousel-list-heading">
+        <div class="owner-section-head">
+          <h2 id="carousel-list-heading">Slides</h2>
+          <button class="button button--primary" type="button" data-slide-add>Add slide</button>
+        </div>
+        <p class="form-status" role="status" data-carousel-status>Loading slides.</p>
+        <div class="owner-product-grid" data-carousel-list></div>
+      </section>
+      <section class="owner-product-panel" data-slide-panel hidden aria-labelledby="slide-form-heading">
+        <h2 id="slide-form-heading" data-slide-form-heading>Add slide</h2>
+        <form class="enquiry-form" data-slide-form>
+          <div class="field">
+            <label for="slide-image">Banner image</label>
+            <input id="slide-image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+            <p class="field-note">JPEG, PNG, or WebP, up to 5 MB. A new slide needs an image.</p>
+            <figure class="owner-product-preview">
+              <img data-slide-preview alt="" hidden>
+            </figure>
+          </div>
+          <div class="field">
+            <label for="slide-title">Title</label>
+            <input id="slide-title" name="title" type="text" maxlength="120">
+          </div>
+          <div class="field">
+            <label for="slide-message">Promotional message</label>
+            <textarea id="slide-message" name="message" maxlength="280"></textarea>
+          </div>
+          <div class="field">
+            <label for="slide-order">Display order</label>
+            <input id="slide-order" name="display_order" type="number" min="0" max="9999" value="0" required>
+          </div>
+          <div class="field">
+            <label for="slide-enabled">
+              <input id="slide-enabled" name="enabled" type="checkbox" checked>
+              Enabled
+            </label>
+          </div>
+          <div class="button-row">
+            <button class="button button--primary" type="submit">Save slide</button>
+            <button class="button button--secondary" type="button" data-slide-cancel>Cancel</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="../js/config.js"></script>
+    <script src="../js/owner-carousel.js"></script>
+  </body>
+</html>

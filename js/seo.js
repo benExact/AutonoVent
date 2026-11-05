@@ -18,6 +18,12 @@
     path = "/";
   }
   var canonicalUrl = origin + path;
+  if (/\/product\.html$/.test(path)) {
+    var product = new URLSearchParams(window.location.search).get("product");
+    if (product && product.trim() && product.trim().toLowerCase() !== "autonovent") {
+      canonicalUrl += "?product=" + encodeURIComponent(product.trim());
+    }
+  }
 
   var canonical = document.querySelector('link[rel="canonical"]');
   if (!canonical) {
@@ -42,16 +48,14 @@
 
   var description = document.querySelector('meta[name="description"]');
   var descriptionText = description ? description.getAttribute("content") || "" : "";
-  ensureMeta('meta[property="og:site_name"]', "property", "og:site_name", "Autonovent");
+  ensureMeta('meta[property="og:site_name"]', "property", "og:site_name", "Omniprod");
   ensureMeta('meta[property="og:title"]', "property", "og:title", document.title);
   ensureMeta('meta[property="og:description"]', "property", "og:description", descriptionText);
   ensureMeta('meta[property="og:type"]', "property", "og:type", "website");
   ensureMeta('meta[property="og:locale"]', "property", "og:locale", "en_ZA");
   var ogUrl = ensureMeta('meta[property="og:url"]', "property", "og:url", canonicalUrl);
-  if (!ogUrl.getAttribute("content")) {
-    ogUrl.setAttribute("content", canonicalUrl);
-  }
-  var imagePath = document.documentElement.getAttribute("data-share-image") || "/assets/images/autonovent-logo.jpg";
+  ogUrl.setAttribute("content", canonicalUrl);
+  var imagePath = document.documentElement.getAttribute("data-share-image") || "/assets/images/omniprod-logo.png";
   if (imagePath.charAt(0) !== "/") {
     imagePath = "/" + imagePath;
   }
@@ -66,14 +70,23 @@
     "@graph": [
       {
         "@type": "Organization",
-        name: "Autonovent",
+        name: "Omniprod",
         url: origin + "/",
-        slogan: "Leave the dust behind.",
-        logo: origin + "/assets/images/autonovent-logo.jpg"
+        logo: origin + "/assets/images/omniprod-logo.png",
+        email: "ferdie@omniprod.co.za",
+        telephone: "010 010 0060",
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: "87 Piet Rautenbach St",
+          addressLocality: "Rosslyn",
+          addressRegion: "Akasia",
+          postalCode: "0200",
+          addressCountry: "ZA"
+        }
       },
       {
         "@type": "WebSite",
-        name: "Autonovent",
+        name: "Omniprod",
         url: origin + "/",
         inLanguage: "en-ZA"
       }

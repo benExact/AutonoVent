@@ -1,6 +1,6 @@
-# Autonovent
+# Omniprod
 
-The public site is static HTML, CSS, and JavaScript. The API is a separate Python service. This milestone is the database and API foundation only. Checkout, PayFast, courier booking, and the admin portal are not implemented.
+The public site is a static HTML, CSS, and JavaScript shop. Autonovent is one product in the catalogue. The API is a separate Python service. This milestone is the database and API foundation only. Checkout, PayFast, courier booking, and the admin portal are not implemented.
 
 ## What is already decided
 

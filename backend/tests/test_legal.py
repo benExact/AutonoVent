@@ -31,8 +31,10 @@ def test_legal_pages_are_drafts_with_placeholders() -> None:
     assert "v1.0-draft" in shipping
     assert "[Registered company name — to be confirmed]" in terms
     assert "[VAT number — to be confirmed]" in terms
-    assert "[Telephone number — to be confirmed]" in terms
-    assert "[Physical address — to be confirmed]" in terms
+    assert "ferdie@omniprod.co.za" in terms
+    assert "010 010 0060" in terms
+    assert "87 Piet Rautenbach St, Rosslyn, Akasia, 0200, South Africa" in terms
+    assert "tel:0100100060" in terms
     assert "[Information officer — to be confirmed]" in privacy
     assert "[Retention period — to be confirmed]" in privacy
     assert "has not been confirmed" in terms

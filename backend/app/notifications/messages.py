@@ -16,15 +16,15 @@ STATUS_COPY = {
 
 
 def payment_confirmation(order: Order, *, logo_url: str, sandbox: bool = False) -> tuple[str, str, str]:
-    subject = f"Autonovent order {order.order_number} confirmed"
+    subject = f"Omniprod order {order.order_number} confirmed"
     lines = _item_lines(order)
     address = _address(order)
     when = _when(order.created_at)
     simulation = _simulation_note(order, sandbox=sandbox)
     text = "\n".join(
         [
-            "Autonovent",
-            "Leave the dust behind.",
+            "Omniprod",
+            "Shop practical products.",
             "",
             "Your order has been received and payment is confirmed.",
             simulation,
@@ -69,15 +69,15 @@ def payment_confirmation(order: Order, *, logo_url: str, sandbox: bool = False) 
 def fulfilment_update(order: Order, status: str, updated_at: datetime, shipment: Shipment | None, *, logo_url: str) -> tuple[str, str, str]:
     label = status.replace("_", " ").capitalize()
     explanation = STATUS_COPY.get(status, "The fulfilment status of your order has changed.")
-    subject = f"Autonovent order {order.order_number} is {label.lower()}"
+    subject = f"Omniprod order {order.order_number} is {label.lower()}"
     when = _when(updated_at)
     simulation = _simulation_note(order, sandbox=order.shipping_provider in {"bobgo", "shiplogic"})
     tracking = ""
     if shipment is not None and shipment.tracking_number:
         tracking = f"Tracking reference: {shipment.tracking_number}"
     text_lines = [
-        "Autonovent",
-        "Leave the dust behind.",
+        "Omniprod",
+        "Shop practical products.",
         "",
         f"Order {order.order_number} is now {label.lower()}.",
         explanation,
@@ -121,9 +121,9 @@ def _html(
 ) -> str:
     logo = ""
     if logo_url.strip():
-        logo = f'<img src="{_esc(logo_url.strip())}" alt="Autonovent" width="160" style="display:block;height:auto;border:0;">'
+        logo = f'<img src="{_esc(logo_url.strip())}" alt="Omniprod" width="160" style="display:block;height:auto;border:0;">'
     else:
-        logo = '<p style="margin:0;font-size:22px;letter-spacing:0.08em;text-transform:uppercase;">Autonovent</p>'
+        logo = '<p style="margin:0;font-size:22px;letter-spacing:0.08em;text-transform:uppercase;">Omniprod</p>'
     detail_rows = "".join(
         f"<tr><td style=\"padding:8px 12px 8px 0;color:#A3B18A;\">{_esc(name)}</td><td style=\"padding:8px 0;\">{_esc(value)}</td></tr>"
         for name, value in rows
@@ -145,7 +145,7 @@ def _html(
             <tr>
               <td style="padding:28px 24px;color:#F7F8F3;">
                 {logo}
-                <p style="margin:8px 0 0;color:#A3B18A;">Leave the dust behind.</p>
+                <p style="margin:8px 0 0;color:#A3B18A;">Shop practical products.</p>
                 <h1 style="margin:24px 0 8px;font-size:24px;line-height:1.3;">{_esc(heading)}</h1>
                 <p style="margin:0;line-height:1.5;">{_esc(intro)}</p>
                 {simulation_html}

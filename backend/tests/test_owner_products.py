@@ -3,6 +3,7 @@
 import base64
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from app.db.session import reset_engine
 from app.main import app
 from app.models.audit import ProductAuditEvent
 from app.models.order import OrderItem, OrderStatusEvent
-from app.orders.service import DeliveryAddress, OrderDraft, OrderLine, create_order
+from app.orders.service import DeliveryAddress, OrderDraft, OrderLine, OrderValidationError, create_order
 
 client = TestClient(app)
 EMAIL = "fixture-owner@example.com"
@@ -105,11 +106,25 @@ def _create(body: dict):
     return client.post("/api/v1/admin/products", json=body, headers={"X-CSRF-Token": _cookie("autonovent_csrf")})
 
 
+def test_owner_can_preflight_a_product_delete() -> None:
+    response = client.options(
+        f"/api/v1/admin/products/{uuid.uuid4()}",
+        headers={
+            "Origin": "http://127.0.0.1:8765",
+            "Access-Control-Request-Method": "DELETE",
+            "Access-Control-Request-Headers": "x-csrf-token",
+        },
+    )
+    assert response.status_code == 200
+    assert "DELETE" in response.headers["access-control-allow-methods"]
+
+
 def test_product_management_requires_an_owner(monkeypatch, isolated_database_url: str) -> None:
     _use_database(monkeypatch, isolated_database_url)
     assert client.get("/api/v1/admin/products").status_code == 401
     assert client.post("/api/v1/admin/products", json=PRODUCT).status_code == 401
     assert client.patch(f"/api/v1/admin/products/{uuid.uuid4()}", json={"name": "Fixture"}).status_code == 401
+    assert client.delete(f"/api/v1/admin/products/{uuid.uuid4()}").status_code == 401
     assert client.get("/api/v1/admin/readiness").status_code == 404
 
 
@@ -376,5 +391,96 @@ def test_one_product_image_can_be_replaced_and_is_served_publicly(monkeypatch, i
     assert client.get(second_url).content == replacement
     assert len(list(tmp_path.iterdir())) == 1
     assert client.get("/api/v1/admin/products").json()["products"].__len__() == 1
+    reset_engine()
+    get_settings.cache_clear()
+
+
+def test_archiving_a_product_keeps_order_history_and_blocks_purchase(monkeypatch, isolated_database_url: str) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    _owner(isolated_database_url)
+    _login()
+    created = _create(_priced("fixture-archive", "ARCH-1", name="Archive fixture", price_rands="1500.00"))
+    assert created.status_code == 201
+    product_id = uuid.UUID(created.json()["id"])
+    kept = _create(_priced("fixture-kept", "ARCH-2", name="Kept fixture", price_rands="900.00"))
+    assert kept.status_code == 201
+    engine = create_engine(isolated_database_url)
+    with Session(engine, expire_on_commit=False) as session:
+        order = create_order(
+            session,
+            OrderDraft(
+                idempotency_key="fixture-archive-order",
+                customer_name="Fixture Customer",
+                customer_email="fixture@example.com",
+                delivery=DeliveryAddress(
+                    name="Fixture Customer",
+                    line1="1 Fixture Street",
+                    city="Pretoria",
+                    region="Gauteng",
+                    postal_code="0002",
+                ),
+                lines=[OrderLine(product_id=product_id, quantity=2)],
+                shipping_cents=8500,
+            ),
+        )
+        order_id = order.id
+        item_id = order.items[0].id
+    engine.dispose()
+    client.cookies.clear()
+    assert client.delete(f"/api/v1/admin/products/{product_id}").status_code == 401
+    _login()
+    mismatched = client.delete(
+        f"/api/v1/admin/products/{product_id}",
+        headers={"X-CSRF-Token": "not-the-cookie"},
+    )
+    assert mismatched.status_code == 403
+    removed = client.delete(
+        f"/api/v1/admin/products/{product_id}",
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    )
+    assert removed.status_code == 204
+    assert client.delete(
+        f"/api/v1/admin/products/{product_id}",
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    ).status_code == 404
+    assert client.patch(
+        f"/api/v1/admin/products/{product_id}",
+        json={"name": "Should stay archived"},
+        headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
+    ).status_code == 404
+    listed = client.get("/api/v1/admin/products")
+    assert [item["slug"] for item in listed.json()["products"]] == ["fixture-kept"]
+    public = client.get("/api/v1/products")
+    assert [item["slug"] for item in public.json()["products"]] == ["fixture-kept"]
+    engine = create_engine(isolated_database_url)
+    with Session(engine, expire_on_commit=False) as session:
+        item = session.get(OrderItem, item_id)
+        assert item is not None
+        assert item.order_id == order_id
+        assert item.product_id == product_id
+        assert item.product_name == "Archive fixture"
+        assert item.sku == "ARCH-1"
+        assert item.quantity == 2
+        assert item.unit_price_cents == 150000
+        assert item.line_total_cents == 300000
+        with pytest.raises(OrderValidationError):
+            create_order(
+                session,
+                OrderDraft(
+                    idempotency_key="fixture-archive-second",
+                    customer_name="Fixture Customer",
+                    customer_email="fixture@example.com",
+                    delivery=DeliveryAddress(
+                        name="Fixture Customer",
+                        line1="1 Fixture Street",
+                        city="Pretoria",
+                        region="Gauteng",
+                        postal_code="0002",
+                    ),
+                    lines=[OrderLine(product_id=product_id, quantity=1)],
+                    shipping_cents=0,
+                ),
+            )
+    engine.dispose()
     reset_engine()
     get_settings.cache_clear()

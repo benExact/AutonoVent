@@ -3,28 +3,32 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Shop Autonovent | Bakkie canopy vent</title>
-    <meta name="description" content="Buy Autonovent, a bakkie canopy vent for dusty gravel-road and overlanding travel. The price shown is the current catalogue price in rand.">
+    <title>Shop | Omniprod</title>
+    <meta name="description" content="Shop the products currently for sale at Omniprod, including Autonovent. Prices are shown in rand.">
     <meta name="theme-color" content="#0B0B0B">
     <link rel="icon" href="favicon.ico" sizes="16x16">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=20261103c">
     <script src="js/seo.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="container site-header__bar">
-        <a class="brand" href="index.html" aria-label="Autonovent">
-          <img class="brand-logo" src="assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+        <a class="brand" href="index.html" aria-label="Omniprod">
+          <img class="brand-logo" src="assets/images/omniprod-logo.png" width="899" height="132" alt="Omniprod">
         </a>
+        <form class="store-search" role="search" action="products.html" method="get" data-catalogue-form>
+          <label class="visually-hidden" for="catalogue-search">Search products</label>
+          <input id="catalogue-search" type="search" name="q" data-catalogue-search placeholder="Search products" autocomplete="off" enterkeyhint="search">
+          <button class="store-search__clear" type="button" data-catalogue-clear hidden>Clear</button>
+        </form>
         <nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary">
           <ul class="nav-list">
             <li><a href="index.html">Home</a></li>
-            <li><a href="product.html">Product</a></li>
-            <li><a href="how-it-works.html">How It Works</a></li>
-            <li><a href="installation.html">Installation</a></li>
+            <li><a href="products.html" aria-current="page">Shop</a></li>
+            <li><a href="about.html">About Us</a></li>
+            <li><a href="contact.html">Contact Us</a></li>
           </ul>
-          <a class="button button--primary nav-quote" href="products.html" aria-current="page">Shop</a>
         </nav>
         <div class="site-header__tools">
           <a class="cart-link" href="cart.html">Cart <span data-cart-count>0</span></a>
@@ -42,8 +46,20 @@
     <main class="site-main" id="main">
       <section class="product-section" aria-labelledby="shop-heading" data-catalogue>
         <div class="container">
-          <p class="eyebrow">Leave the dust behind.</p>
-          <h1 id="shop-heading" class="section-heading">Shop</h1>
+          <h1 id="shop-heading" class="shop-heading">Shop</h1>
+          <p class="lede shop-intro">Browse what is for sale, including <a href="product.html">Autonovent</a>.</p>
+          <div class="shop-toolbar">
+            <p class="shop-count" data-catalogue-count>Loading products.</p>
+            <label class="shop-sort" for="catalogue-sort">
+              Sort
+              <select id="catalogue-sort" data-catalogue-sort>
+                <option value="featured">Featured</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+                <option value="name">Name: A–Z</option>
+              </select>
+            </label>
+          </div>
           <p class="lede" data-catalogue-status role="status">Loading products.</p>
           <div data-catalogue-list></div>
           <button class="button button--secondary" type="button" data-catalogue-retry hidden>Try again</button>
@@ -53,18 +69,22 @@
     <footer class="site-footer">
       <div class="container footer-grid">
         <div>
-          <a class="brand brand--footer" href="index.html" aria-label="Autonovent">
-            <img class="brand-logo" src="assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+          <a class="brand brand--footer" href="index.html" aria-label="Omniprod">
+            <img class="brand-logo" src="assets/images/omniprod-logo.png" width="899" height="132" alt="Omniprod">
           </a>
-          <p class="footer-tagline">Leave the dust behind.</p>
+          <p class="footer-tagline">Shop practical products.</p>
+          <address class="footer-contact">
+            87 Piet Rautenbach St, Rosslyn, Akasia, 0200, South Africa<br>
+            <a href="tel:0100100060">010 010 0060</a><br>
+            <a href="mailto:ferdie@omniprod.co.za">ferdie@omniprod.co.za</a>
+          </address>
         </div>
         <nav aria-label="Footer">
           <p class="footer-heading">Explore</p>
           <ul class="footer-links">
             <li><a href="index.html">Home</a></li>
-            <li><a href="product.html">Product</a></li>
-            <li><a href="how-it-works.html">How It Works</a></li>
-            <li><a href="installation.html">Installation</a></li>
+            <li><a href="products.html">Shop</a></li>
+            <li><a href="cart.html">Cart</a></li>
           </ul>
         </nav>
         <div>
@@ -72,18 +92,20 @@
           <ul class="footer-links">
             <li><a href="products.html">Products</a></li>
             <li><a href="cart.html">Cart</a></li>
+            <li><a href="about.html">About Us</a></li>
+            <li><a href="contact.html">Contact Us</a></li>
             <li><a href="terms.html">Terms and Conditions</a></li>
             <li><a href="privacy.html">Privacy Notice</a></li>
             <li><a href="shipping-and-returns.html">Shipping and returns</a></li>
           </ul>
-          <p class="placeholder-note">Contact details have not been published yet.</p>
         </div>
       </div>
       <div class="container footer-bottom">
-        <p>&copy; <span data-copyright-year>2026</span> Autonovent</p>
+        <p>&copy; <span data-copyright-year>2026</span> Omniprod</p>
       </div>
     </footer>
     <script src="js/config.js"></script>
+    <script src="js/catalogue-search.js"></script>
     <script src="js/cart.js" defer></script>
     <script src="js/main.js" defer></script>
     <script src="js/catalogue.js" defer></script>

@@ -4,6 +4,8 @@ from fastapi import APIRouter
 
 from app.api.v1.addresses import router as addresses_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.carousel import admin_router as carousel_admin_router
+from app.api.v1.carousel import router as carousel_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.checkout import router as checkout_router
 from app.api.v1.health import router as health_router
@@ -18,3 +20,5 @@ router.include_router(checkout_router, tags=["checkout"])
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
 router.include_router(orders_router, tags=["orders"])
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
+router.include_router(carousel_router)
+router.include_router(carousel_admin_router, prefix="/admin")

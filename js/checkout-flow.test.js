@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const vm = require("node:vm");
 const flow = require("./checkout-flow.js");
 
 const address = {
@@ -150,7 +151,12 @@ test("product prices use rands and shop thumbnails keep their shape", () => {
   const owner = fs.readFileSync(path.join(__dirname, "..", "owner", "products.html"), "utf8");
   assert.match(catalogue, /image_url/);
   assert.doesNotMatch(catalogue, /autonovent-roof-sunset-card/);
-  assert.match(css, /\.product-card \.product-shot img \{[\s\S]*object-fit: cover;/);
+  assert.match(css, /\.product-card \.product-shot img \{[\s\S]*object-fit: contain;/);
+  assert.match(catalogue, /product-placeholder\.svg/);
+  const ownerScript = fs.readFileSync(path.join(__dirname, "owner-products.js"), "utf8");
+  assert.match(ownerScript, /Delete product/);
+  assert.match(ownerScript, /method: "DELETE"/);
+  assert.match(ownerScript, /window\.confirm\(\s*"Delete " \+ name/);
   assert.match(css, /@media \(min-width: 48rem\) \{[\s\S]*\.owner-product-grid/);
   assert.match(owner, /Add Product/);
   assert.match(owner, /name="price_rands"/);
@@ -187,7 +193,9 @@ test("public pages have unique titles and private routes stay out of the sitemap
     "products.html",
     "terms.html",
     "privacy.html",
-    "shipping-and-returns.html"
+    "shipping-and-returns.html",
+    "about.html",
+    "contact.html"
   ];
   const titles = pages.map((name) => {
     const html = fs.readFileSync(path.join(root, name), "utf8");
@@ -210,11 +218,41 @@ test("public pages have unique titles and private routes stay out of the sitemap
   const sitemap = fs.readFileSync(path.join(root, "sitemap.xml"), "utf8");
   assert.match(sitemap, /product\.html/);
   assert.match(sitemap, /products\.html/);
+  assert.match(sitemap, /about\.html/);
+  assert.match(sitemap, /contact\.html/);
   assert.doesNotMatch(sitemap, /cart\.html|checkout\.html|owner\//);
   const catalogue = fs.readFileSync(path.join(__dirname, "catalogue.js"), "utf8");
   assert.match(catalogue, /"@type": "Product"/);
   assert.match(catalogue, /"@type": "Offer"/);
   assert.doesNotMatch(catalogue, /aggregateRating|review/);
+});
+
+test("catalogue search matches part of a name, description or SKU and can be sorted", () => {
+  const context = { window: {} };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "catalogue-search.js"), "utf8"), context);
+  const search = context.window.OmniprodCatalogueSearch;
+  const products = [
+    { name: "Autonovent", description: "A vent for a canopy to reduce dust intake.", sku: "AV001", unit_price_cents: 150000 },
+    { name: "Parcel Tape", description: "Wide tape for closing a carton.", sku: "PT9", unit_price_cents: 4500 }
+  ];
+  assert.equal(search.matchesProduct(products[0], "  DUST "), true);
+  assert.equal(search.matchesProduct(products[0], "av001"), true);
+  assert.equal(search.matchesProduct(products[1], "canopy vent"), false);
+  assert.equal(search.matchesProduct(products[0], "canopy vent"), true);
+  assert.deepEqual(search.sortProducts(products, "price-asc").map((product) => product.name), ["Parcel Tape", "Autonovent"]);
+  assert.deepEqual(search.sortProducts(products, "price-desc").map((product) => product.name), ["Autonovent", "Parcel Tape"]);
+  assert.deepEqual(search.sortProducts(products, "name").map((product) => product.name), ["Autonovent", "Parcel Tape"]);
+  assert.deepEqual(search.sortProducts(products, "featured").map((product) => product.name), ["Autonovent", "Parcel Tape"]);
+  const home = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const shop = fs.readFileSync(path.join(__dirname, "..", "products.html"), "utf8");
+  assert.match(home, /Shop All Products/);
+  assert.match(home, /data-store-hero/);
+  assert.match(home, /href="products\.html"/);
+  assert.doesNotMatch(home, /data-catalogue-list/);
+  assert.match(shop, /data-catalogue-search/);
+  assert.match(shop, /href="product\.html">Autonovent/);
+  assert.doesNotMatch(home, /name="robots" content="noindex/);
 });
 
 test("cart items show the catalogue image beside the existing controls", () => {

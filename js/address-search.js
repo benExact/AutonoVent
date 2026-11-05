@@ -201,7 +201,7 @@
           }
           if (result.body.enabled === false) {
             closeList();
-            setStatus(result.body.detail || "Address search is not configured. Enter the address manually.");
+            setStatus(result.body.detail || "Address search is unavailable. Enter the address manually.");
             return;
           }
           suggestions = Array.isArray(result.body.suggestions) ? result.body.suggestions : [];

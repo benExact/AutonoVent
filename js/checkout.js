@@ -696,7 +696,7 @@
   }
 
   if (!endpoint) {
-    setStatus("The checkout service is not configured.");
+    setStatus("Checkout could not be loaded.");
     return;
   }
 

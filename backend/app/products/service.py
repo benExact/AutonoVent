@@ -1,6 +1,7 @@
 """Owner product records. Prices are saved only when the owner supplies them."""
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.audit import ProductAuditEvent
 from app.models.product import Product
 
-AUDITED_FIELDS = ("name", "slug", "description", "sku", "unit_price_cents", "currency", "active", "image_filename")
+AUDITED_FIELDS = ("name", "slug", "description", "sku", "unit_price_cents", "currency", "active", "archived_at", "image_filename")
 
 
 class ProductError(Exception):
@@ -25,11 +26,18 @@ class ProductConflict(ProductError):
 
 
 def list_products(session: Session) -> list[Product]:
-    return list(session.scalars(select(Product).order_by(Product.name, Product.slug)))
+    return list(
+        session.scalars(
+            select(Product).where(Product.archived_at.is_(None)).order_by(Product.name, Product.slug)
+        )
+    )
 
 
 def get_product(session: Session, product_id: uuid.UUID) -> Product | None:
-    return session.get(Product, product_id)
+    product = session.get(Product, product_id)
+    if product is None or product.archived_at is not None:
+        return None
+    return product
 
 
 def create_product(session: Session, fields: dict[str, object], actor: str) -> Product:
@@ -46,7 +54,7 @@ def create_product(session: Session, fields: dict[str, object], actor: str) -> P
 
 
 def update_product(session: Session, product_id: uuid.UUID, fields: dict[str, object], actor: str) -> Product:
-    product = session.get(Product, product_id)
+    product = get_product(session, product_id)
     if product is None:
         raise ProductNotFound("The product does not exist.")
     previous = {field: getattr(product, field) for field in AUDITED_FIELDS}
@@ -63,8 +71,28 @@ def update_product(session: Session, product_id: uuid.UUID, fields: dict[str, ob
     return product
 
 
+def archive_product(session: Session, product_id: uuid.UUID, actor: str) -> None:
+    product = get_product(session, product_id)
+    if product is None:
+        raise ProductNotFound("The product does not exist.")
+    previous_active = product.active
+    archived_at = datetime.now(timezone.utc)
+    product.active = False
+    product.archived_at = archived_at
+    _record(
+        session,
+        product.id,
+        actor,
+        [
+            {"field": "active", "previous": previous_active, "new": False},
+            {"field": "archived_at", "previous": None, "new": archived_at.isoformat()},
+        ],
+    )
+    session.commit()
+
+
 def list_audit_events(session: Session, product_id: uuid.UUID) -> list[ProductAuditEvent]:
-    if session.get(Product, product_id) is None:
+    if get_product(session, product_id) is None:
         raise ProductNotFound("The product does not exist.")
     return list(
         session.scalars(

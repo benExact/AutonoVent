@@ -236,7 +236,7 @@ def _build_order(session: Session, draft: OrderDraft, key: str, fingerprint: str
         if not isinstance(line.quantity, int) or isinstance(line.quantity, bool) or line.quantity <= 0 or line.quantity > 20:
             raise OrderValidationError("Quantity must be a positive integer.")
         product = session.get(Product, line.product_id)
-        if product is None or not product.active:
+        if product is None or not product.active or product.archived_at is not None:
             raise OrderValidationError("An item is not available at a confirmed price.")
         if product.unit_price_cents is not None:
             unit_price = product.unit_price_cents

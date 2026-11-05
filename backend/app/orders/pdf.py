@@ -37,7 +37,7 @@ STATUS_LABELS = {
 def document_filename(order_number: str) -> str:
     safe = "".join(character if character.isalnum() or character in "-_" else "-" for character in order_number)
     collapsed = "-".join(part for part in safe.split("-") if part)
-    return f"AutonoVent-Order-{collapsed or 'order'}.pdf"
+    return f"Omniprod-Order-{collapsed or 'order'}.pdf"
 
 
 def render_order_pdf(order: Order, payments: list[Payment]) -> bytes:
@@ -68,13 +68,13 @@ class _Document(FPDF):
         self.set_xy(16, 7)
         self.set_text_color(247, 248, 243)
         self.set_font("DejaVu", "B", 16)
-        self.cell(120, 8, "AutonoVent")
+        self.cell(120, 8, "Omniprod")
         self.set_font("DejaVu", "", 11)
         self.set_text_color(217, 201, 169)
         self.cell(0, 8, "Order Details", align="R", new_x="LMARGIN", new_y="NEXT")
         self.set_x(16)
         self.set_font("DejaVu", "", 9)
-        self.cell(0, 6, "Leave the dust behind.", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, "Shop practical products.", new_x="LMARGIN", new_y="NEXT")
 
     def footer(self) -> None:
         self.set_y(-14)
@@ -82,7 +82,7 @@ class _Document(FPDF):
         self.line(16, self.get_y(), 194, self.get_y())
         self.set_font("DejaVu", "", 8)
         self.set_text_color(86, 107, 47)
-        self.cell(0, 8, f"AutonoVent  ·  {self.order_number}  ·  Page {self.page_no()} of {{nb}}", align="C")
+        self.cell(0, 8, f"Omniprod  ·  {self.order_number}  ·  Page {self.page_no()} of {{nb}}", align="C")
 
     def summary(self, order: Order) -> None:
         self.set_xy(self.l_margin, 36)

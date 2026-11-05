@@ -72,9 +72,30 @@ def _stored_file(filename: str) -> Path | None:
     return path
 
 
+def _named_file(directory: Path, filename: str) -> Path | None:
+    if not IMAGE_NAME.fullmatch(filename):
+        return None
+    path = directory / filename
+    if not path.is_file():
+        return None
+    return path
+
+
 @router.get("/media/products/{filename}")
 def product_image(filename: str) -> FileResponse:
     path = _stored_file(filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="The image does not exist.")
+    return FileResponse(path, media_type=MEDIA_TYPES[path.suffix[1:]])
+
+
+@router.get("/media/carousel/{filename}")
+def carousel_image(filename: str) -> FileResponse:
+    settings = get_settings()
+    directory = Path(settings.carousel_image_dir)
+    if not directory.is_absolute():
+        directory = Path.cwd() / directory
+    path = _named_file(directory, filename)
     if path is None:
         raise HTTPException(status_code=404, detail="The image does not exist.")
     return FileResponse(path, media_type=MEDIA_TYPES[path.suffix[1:]])

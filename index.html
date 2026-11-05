@@ -3,19 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Autonovent | Bakkie canopy dust control</title>
-    <meta name="description" content="Autonovent is a bakkie canopy vent that uses airflow and negative pressure to help reduce dust entering the canopy on South African gravel roads.">
+    <title>Omniprod | Shop Products Online</title>
+    <meta name="description" content="Explore the Omniprod online store and the products currently listed, including Autonovent, a bakkie canopy vent.">
     <meta name="theme-color" content="#0B0B0B">
     <!-- Open Graph values are placeholders. Set the production URL and image before launch. -->
-    <meta property="og:site_name" content="Autonovent">
-    <meta property="og:title" content="Autonovent | Bakkie canopy dust control">
-    <meta property="og:description" content="Autonovent is a bakkie canopy vent that uses airflow and negative pressure to help reduce dust entering the canopy on South African gravel roads.">
+    <meta property="og:site_name" content="Omniprod">
+    <meta property="og:title" content="Omniprod | Shop Products Online">
+    <meta property="og:description" content="Explore the Omniprod online store and the products currently listed, including Autonovent, a bakkie canopy vent.">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="en_ZA">
     <meta property="og:url" content="">
     <meta property="og:image" content="">
+    <link rel="canonical" href="/">
     <link rel="icon" href="favicon.ico" sizes="16x16">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=20261105b">
     <script type="application/ld+json" id="seo-home"></script>
     <script src="js/seo.js"></script>
   </head>
@@ -23,17 +24,16 @@
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="container site-header__bar">
-        <a class="brand" href="index.html" aria-label="Autonovent">
-          <img class="brand-logo" src="assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+        <a class="brand" href="index.html" aria-label="Omniprod">
+          <img class="brand-logo" src="assets/images/omniprod-logo.png" width="899" height="132" alt="Omniprod">
         </a>
         <nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary">
           <ul class="nav-list">
             <li><a href="index.html" aria-current="page">Home</a></li>
-            <li><a href="product.html">Product</a></li>
-            <li><a href="how-it-works.html">How It Works</a></li>
-            <li><a href="installation.html">Installation</a></li>
+            <li><a href="products.html">Shop</a></li>
+            <li><a href="about.html">About Us</a></li>
+            <li><a href="contact.html">Contact Us</a></li>
           </ul>
-          <a class="button button--primary nav-quote" href="products.html">Shop</a>
         </nav>
         <div class="site-header__tools">
           <a class="cart-link" href="cart.html">Cart <span data-cart-count>0</span></a>
@@ -49,146 +49,81 @@
       </div>
     </header>
     <main class="site-main" id="main">
-      <section class="hero" aria-labelledby="hero-heading">
-        <div class="hero-media hero-media--installed">
-          <img src="assets/images/optimised/autonovent-dust-road.webp" srcset="assets/images/optimised/autonovent-dust-road-800.webp 800w, assets/images/optimised/autonovent-dust-road.webp 1254w" sizes="100vw" width="1254" height="1254" fetchpriority="high" alt="A white bakkie canopy on a dusty South African gravel track, with a small Autonovent mounted on the roof ahead of a roof rack. The photograph shows the unit in use and is not a vehicle fitment list.">
+      <section class="store-hero" data-store-hero aria-roledescription="carousel" aria-label="Promotions" tabindex="0">
+        <h1 class="visually-hidden" id="hero-heading">Discover something useful.</h1>
+        <div class="store-hero__frame" data-hero-visual>
+          <div class="store-hero__fallback" data-hero-fallback>
+            <p class="eyebrow">Omniprod</p>
+            <p class="store-hero__headline">Discover something useful.</p>
+            <p class="lede">Practical products, with a clear price in rand.</p>
+            <a class="button button--primary" href="products.html">Shop All Products</a>
+          </div>
         </div>
-        <div class="hero-shade" aria-hidden="true"></div>
+        <div class="store-hero__nav" data-hero-nav hidden>
+          <button class="hero-control" type="button" data-hero-prev aria-label="Previous promotion">
+            <span aria-hidden="true">‹</span>
+          </button>
+          <div class="hero-dots" data-hero-dots role="tablist" aria-label="Choose a promotion"></div>
+          <button class="hero-control" type="button" data-hero-next aria-label="Next promotion">
+            <span aria-hidden="true">›</span>
+          </button>
+        </div>
+      </section>
+      <section class="home-band" aria-labelledby="featured-heading">
         <div class="container">
-          <div class="hero-copy">
-            <p class="eyebrow">Canopy ventilation for dusty roads</p>
-            <h1 id="hero-heading">Leave the dust behind.</h1>
-            <p class="lede">Smarter airflow designed to help keep dust out of your canopy, so you can focus on the journey ahead.</p>
-            <div class="button-row">
-              <a class="button button--primary" href="product.html">Discover Autonovent</a>
-              <a class="button button--secondary" href="how-it-works.html">How It Works</a>
-            </div>
+          <div class="home-band__head">
+            <h2 id="featured-heading">Featured products</h2>
+            <a href="products.html">Shop All Products</a>
           </div>
+          <p class="lede" data-home-products-status role="status">Loading products.</p>
+          <div data-home-products></div>
         </div>
       </section>
-
-      <section class="band reveal" data-reveal aria-labelledby="problem-heading">
-        <div class="container split">
-          <div class="problem-copy">
-            <p class="eyebrow">The problem</p>
-            <h2 id="problem-heading" class="section-heading">Dust should stay out there.</h2>
-            <p class="lede">On a South African gravel road, a fine cloud follows the bakkie. That dust can work its way into a canopy, settle on camping gear, and still be there after the road has changed.</p>
-            <p class="lede">It is a familiar frustration for anyone who travels with a canopy: more time spent clearing dust, and less of the trip left for the journey itself.</p>
-          </div>
-          <figure class="diagram">
-            <svg viewBox="0 0 640 420" role="img" aria-label="Conceptual sketch of dust outside a canopy. This is not a photograph of Autonovent.">
-              <rect width="640" height="420" fill="none"/>
-              <rect x="250" y="70" width="300" height="250" fill="#1F2D1F" stroke="#A3B18A" stroke-width="2"/>
-              <text x="400" y="200" fill="#F7F8F3" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" text-anchor="middle">Canopy interior</text>
-              <g fill="#D9C9A9">
-                <circle cx="70" cy="120" r="4"/>
-                <circle cx="120" cy="180" r="3"/>
-                <circle cx="80" cy="240" r="5"/>
-                <circle cx="150" cy="280" r="3"/>
-                <circle cx="50" cy="300" r="4"/>
-                <circle cx="170" cy="140" r="3"/>
-              </g>
-              <text x="110" y="360" fill="#A3B18A" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" text-anchor="middle">Dust outside</text>
-            </svg>
-            <figcaption>Concept only. Not a photograph of the unit.</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <section class="features band reveal" data-reveal aria-labelledby="solution-heading">
+      <section class="home-brand" aria-labelledby="brand-heading">
         <div class="container">
-          <p class="eyebrow">The solution</p>
-          <h2 id="solution-heading" class="section-heading">Airflow for dusty-road adventures.</h2>
-          <p class="section-intro">Autonovent is a compact, self-contained air vent that mounts on the canopy roof, around the middle-front. It is designed to help reduce dust ingress while you travel.</p>
-          <ul class="feature-grid">
-            <li class="feature-card">
-              <h3>Less dust inside</h3>
-              <p>Designed to help reduce dust entering the canopy on dusty roads. It does not make a canopy dustproof.</p>
-            </li>
-            <li class="feature-card">
-              <h3>Made for the road</h3>
-              <p>Intended for gravel travel, overlanding, and the dusty conditions that follow a 4x4.</p>
-            </li>
-            <li class="feature-card">
-              <h3>Compact on the canopy</h3>
-              <p>About the size of an A4 sheet, mounted around the middle-front of the canopy roof.</p>
-            </li>
-            <li class="feature-card">
-              <h3>More of the journey</h3>
-              <p>Less dust to deal with at the end of a gravel road, so more of the trip stays enjoyable.</p>
-            </li>
-          </ul>
+          <p class="eyebrow">The shop</p>
+          <h2 id="brand-heading">A South African shop for practical products.</h2>
+          <p class="lede">Discover a range of thoughtfully selected products designed to make everyday life easier. Shop online with confidence and enjoy convenient delivery across South Africa.</p>
+          <a class="button button--primary" href="products.html">Shop All Products</a>
         </div>
       </section>
-
-      <section class="band band--forest reveal" data-reveal aria-labelledby="airflow-heading">
-        <div class="container">
-          <div class="airflow-copy">
-            <p class="eyebrow">How it works</p>
-            <h2 id="airflow-heading" class="section-heading">Smart airflow. Automatic protection.</h2>
-            <p class="lede">Autonovent opens while you drive so air can be drawn outward from the bakkie canopy. That airflow is designed to help create negative pressure and reduce dust in the load space. The vent closes when you stop, and when rain or moisture is detected.</p>
-            <p class="lede">It does not make a canopy dust-free or waterproof. No manual adjustments are needed.</p>
-            <div class="link-row">
-              <a class="button button--secondary" href="how-it-works.html">How It Works</a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="journey reveal" data-reveal aria-labelledby="journey-heading">
-        <div class="journey-media">
-          <img src="assets/images/hero-dust-track.jpg" width="2200" height="1467" alt="" loading="lazy">
-        </div>
-        <div class="journey-shade" aria-hidden="true"></div>
-        <div class="journey-copy">
-          <div class="container">
-            <p class="eyebrow">Built for the journey</p>
-            <h2 id="journey-heading" class="section-heading">Built for the roads that take you further.</h2>
-            <p class="lede">Autonovent is for bakkie canopy travel on dusty roads: 4x4 touring, long gravel tracks, and the hours when dust hangs in the air behind you.</p>
-            <p class="journey-note">Lifestyle photograph of a vehicle on a dusty track. It does not show Autonovent, and it is not an installation image.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="band reveal" data-reveal aria-labelledby="product-intro-heading">
-        <div class="container split">
-          <div>
-            <p class="eyebrow">The unit</p>
-            <h2 id="product-intro-heading" class="section-heading">A compact vent, purpose-built.</h2>
-            <p class="lede">Autonovent is a small, self-contained unit, about the size of an A4 sheet. It mounts around the middle-front of the canopy roof, with the front opening as the air intake.</p>
-            <div class="link-row">
-              <a class="button button--primary" href="product.html">Explore the Product</a>
-            </div>
-          </div>
-          <figure class="product-shot product-shot--field">
-            <img src="assets/images/optimised/autonovent-roof-sunset.webp" width="1376" height="1143" loading="lazy" alt="Autonovent on a white bakkie canopy roof at sunset. The front intake slot and the solar panel on top are visible, and the unit sits low between the roof ribs.">
-          </figure>
-        </div>
-      </section>
-
-      <section class="reveal" data-reveal aria-labelledby="closing-heading">
-        <div class="container closing-inner">
-          <h2 id="closing-heading" class="section-heading">Ready to leave the dust behind?</h2>
-          <p class="lede">Browse Autonovent in the shop and add it to your cart.</p>
-          <a class="button button--primary" href="products.html">Shop Now</a>
+      <section class="home-reassure" aria-label="Before you buy">
+        <div class="container home-reassure__grid">
+          <article>
+            <h2>Products worth discovering</h2>
+            <p>Explore a considered range of products for everyday needs and new finds.</p>
+          </article>
+          <article>
+            <h2>Delivery made simple</h2>
+            <p>Choose your delivery option at checkout and view the cost before placing your order.</p>
+          </article>
+          <article>
+            <h2>Here to help</h2>
+            <p>Need assistance? Get in touch with our team.</p>
+            <p><a href="tel:0100100060">010 010 0060</a><br><a href="mailto:ferdie@omniprod.co.za">ferdie@omniprod.co.za</a><br><a href="shipping-and-returns.html">Shipping &amp; returns</a></p>
+          </article>
         </div>
       </section>
     </main>
     <footer class="site-footer">
       <div class="container footer-grid">
         <div>
-          <a class="brand brand--footer" href="index.html" aria-label="Autonovent">
-            <img class="brand-logo" src="assets/images/autonovent-logo.jpg" width="651" height="567" alt="Autonovent">
+          <a class="brand brand--footer" href="index.html" aria-label="Omniprod">
+            <img class="brand-logo" src="assets/images/omniprod-logo.png" width="899" height="132" alt="Omniprod">
           </a>
-          <p class="footer-tagline">Leave the dust behind.</p>
+          <p class="footer-tagline">Shop practical products.</p>
+          <address class="footer-contact">
+            87 Piet Rautenbach St, Rosslyn, Akasia, 0200, South Africa<br>
+            <a href="tel:0100100060">010 010 0060</a><br>
+            <a href="mailto:ferdie@omniprod.co.za">ferdie@omniprod.co.za</a>
+          </address>
         </div>
         <nav aria-label="Footer">
           <p class="footer-heading">Explore</p>
           <ul class="footer-links">
             <li><a href="index.html">Home</a></li>
-            <li><a href="product.html">Product</a></li>
-            <li><a href="how-it-works.html">How It Works</a></li>
-            <li><a href="installation.html">Installation</a></li>
+            <li><a href="products.html">Shop</a></li>
+            <li><a href="cart.html">Cart</a></li>
           </ul>
         </nav>
         <div>
@@ -196,18 +131,22 @@
           <ul class="footer-links">
             <li><a href="products.html">Products</a></li>
             <li><a href="cart.html">Cart</a></li>
+            <li><a href="about.html">About Us</a></li>
+            <li><a href="contact.html">Contact Us</a></li>
             <li><a href="terms.html">Terms and Conditions</a></li>
             <li><a href="privacy.html">Privacy Notice</a></li>
             <li><a href="shipping-and-returns.html">Shipping and returns</a></li>
           </ul>
-          <p class="placeholder-note">Contact details have not been published yet.</p>
         </div>
       </div>
       <div class="container footer-bottom">
-        <p>&copy; <span data-copyright-year>2026</span> Autonovent</p>
+        <p>&copy; <span data-copyright-year>2026</span> Omniprod</p>
       </div>
     </footer>
+    <script src="js/config.js"></script>
     <script src="js/cart.js" defer></script>
     <script src="js/main.js" defer></script>
+    <script src="js/home-carousel.js" defer></script>
+    <script src="js/home-products.js" defer></script>
   </body>
 </html>

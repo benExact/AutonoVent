@@ -24,6 +24,7 @@ class Product(Base):
     unit_price_cents: Mapped[int | None] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="ZAR", server_default="ZAR")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     image_filename: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

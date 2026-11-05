@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Replace PRODUCTION-DOMAIN with the confirmed public https origin before submission. -->
+<!-- Replace PRODUCTION-DOMAIN with the confirmed public https origin before submission. /product.html is the Autonovent product page. Another listed product uses /product.html?product={slug}. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://PRODUCTION-DOMAIN/</loc>
-    <lastmod>2026-10-22</lastmod>
+    <lastmod>2026-11-03</lastmod>
   </url>
   <url>
     <loc>https://PRODUCTION-DOMAIN/product.html</loc>
-    <lastmod>2026-10-22</lastmod>
+    <lastmod>2026-11-03</lastmod>
   </url>
   <url>
     <loc>https://PRODUCTION-DOMAIN/how-it-works.html</loc>
@@ -20,6 +20,14 @@
   <url>
     <loc>https://PRODUCTION-DOMAIN/products.html</loc>
     <lastmod>2026-10-22</lastmod>
+  </url>
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/about.html</loc>
+    <lastmod>2026-11-03</lastmod>
+  </url>
+  <url>
+    <loc>https://PRODUCTION-DOMAIN/contact.html</loc>
+    <lastmod>2026-11-03</lastmod>
   </url>
   <url>
     <loc>https://PRODUCTION-DOMAIN/shipping-and-returns.html</loc>

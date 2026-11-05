@@ -337,7 +337,7 @@ def test_order_pdf_matches_the_stored_order_and_stays_private(monkeypatch, isola
     response = client.get(f"/api/v1/orders/{order_id}/document")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
-    assert response.headers["content-disposition"] == f'attachment; filename="AutonoVent-Order-{order_number}.pdf"'
+    assert response.headers["content-disposition"] == f'attachment; filename="Omniprod-Order-{order_number}.pdf"'
     reader = PdfReader(io.BytesIO(response.content))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     assert order_number in text

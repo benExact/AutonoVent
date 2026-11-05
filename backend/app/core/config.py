@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     address_provider: str = ""
     google_places_api_key: str = ""
     product_image_dir: str = "var/product-images"
+    carousel_image_dir: str = "var/carousel-images"
     courier_provider: str = ""
     payment_provider: str = ""
     payfast_mode: str = ""

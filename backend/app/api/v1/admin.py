@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.products.images import ImageRejected, image_directory, public_image_url
 from app.products.service import (
     ProductConflict,
     ProductNotFound,
+    archive_product,
     create_product,
     list_audit_events,
     list_products,
@@ -118,6 +119,8 @@ async def replace_product_image(
     previous = None
     try:
         current = session.get(Product, product_id)
+        if current is not None and current.archived_at is not None:
+            current = None
         previous = current.image_filename if current is not None else None
         product = update_product(session, product_id, {"image_filename": filename}, owner.email)
     except ProductNotFound as exc:
@@ -132,6 +135,22 @@ async def replace_product_image(
     if previous and previous != filename:
         remove_product_image(directory, previous)
     return _view(product)
+
+
+@router.delete("/products/{product_id}", status_code=204)
+def remove_product(
+    product_id: uuid.UUID,
+    principal: tuple[AdminUser, AdminSession] = Depends(require_csrf),
+    session: Session = Depends(get_session),
+) -> Response:
+    owner, _row = principal
+    try:
+        archive_product(session, product_id, owner.email)
+    except ProductNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    return Response(status_code=204)
 
 
 @router.get("/products/{product_id}/audit", response_model=ProductAuditList)

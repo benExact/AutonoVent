@@ -278,7 +278,7 @@ def _selected_rate(settings: Settings, province: str, service_code: str) -> Simu
 
 
 def applicable_price(product: Product, settings: Settings) -> tuple[int, bool] | None:
-    if not product.active:
+    if not product.active or product.archived_at is not None:
         return None
     if product.unit_price_cents is not None:
         return product.unit_price_cents, False

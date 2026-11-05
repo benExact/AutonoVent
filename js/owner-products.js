@@ -14,6 +14,7 @@
   let selectedFile = null;
   let previewUrl = "";
   let saving = false;
+  let deleting = false;
   const maxImageBytes = 5 * 1024 * 1024;
 
   function setStatus(node, message) {
@@ -152,7 +153,16 @@
       edit.className = "button button--secondary";
       edit.textContent = "Edit";
       edit.addEventListener("click", () => fillForm(product));
-      card.append(figure, name, sku, price, state, edit);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button button--secondary";
+      remove.setAttribute("data-product-delete", "");
+      remove.textContent = "Delete product";
+      remove.addEventListener("click", () => removeProduct(product.id, product.name));
+      const actions = document.createElement("div");
+      actions.className = "button-row";
+      actions.append(edit, remove);
+      card.append(figure, name, sku, price, state, actions);
       host.append(card);
     });
   }
@@ -181,6 +191,11 @@
     form.price_rands.value = moneyInput.randsFromCents(product.unit_price_cents);
     form.active.checked = product.active === true;
     showPreview(imageSource(product), product.name);
+    const remove = document.querySelector("[data-product-form] [data-product-delete]");
+    if (remove) {
+      remove.hidden = false;
+      remove.disabled = false;
+    }
     setStatus(document.querySelector("[data-product-save]"), "");
     showPanel();
     loadAudit(product.id);
@@ -232,6 +247,11 @@
     editingId = "";
     heading.textContent = "Add product";
     form.reset();
+    const remove = form.querySelector("[data-product-delete]");
+    if (remove) {
+      remove.hidden = true;
+      remove.disabled = false;
+    }
     clearPreview();
     setStatus(document.querySelector("[data-product-save]"), "");
     const history = document.querySelector("[data-product-audit]");
@@ -296,6 +316,50 @@
     return "";
   }
 
+  function removeProduct(productId, productName) {
+    if (!productId || deleting || saving) {
+      return;
+    }
+    const name = typeof productName === "string" && productName.trim() ? productName.trim() : "this product";
+    const confirmed = window.confirm(
+      "Delete " + name + "? It will be removed from the shop and this product list. Past orders keep their items and prices. You cannot restore it from this list."
+    );
+    if (!confirmed) {
+      return;
+    }
+    deleting = true;
+    document.querySelectorAll("[data-product-delete]").forEach((button) => {
+      button.disabled = true;
+    });
+    const status = document.querySelector("[data-products-status]");
+    setStatus(status, "Removing " + name + ".");
+    api("/api/v1/admin/products/" + encodeURIComponent(productId), {
+      method: "DELETE",
+      headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+    }).then(async (response) => {
+      if (response.status === 401) {
+        window.location.assign("login.html");
+        return;
+      }
+      if (response.status !== 204) {
+        setStatus(status, await detailMessage(response));
+        return;
+      }
+      if (editingId === productId) {
+        clearForm();
+      }
+      setStatus(status, name + " was removed.");
+      loadProducts();
+    }).catch(() => {
+      setStatus(status, "The product could not be removed.");
+    }).finally(() => {
+      deleting = false;
+      document.querySelectorAll("[data-product-delete]").forEach((button) => {
+        button.disabled = false;
+      });
+    });
+  }
+
   function bindProductForm() {
     const form = document.querySelector("[data-product-form]");
     const clear = document.querySelector("[data-product-clear]");
@@ -310,6 +374,15 @@
       add.addEventListener("click", openNewProduct);
     }
     clear.addEventListener("click", clearForm);
+    const remove = form.querySelector("[data-product-delete]");
+    if (remove) {
+      remove.addEventListener("click", () => {
+        if (!editingId) {
+          return;
+        }
+        removeProduct(editingId, form.name.value);
+      });
+    }
     if (imageInput) {
       imageInput.addEventListener("change", () => {
         const file = imageInput.files && imageInput.files[0];
