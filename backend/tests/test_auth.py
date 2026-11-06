@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
+from sqlalchemy.exc import OperationalError
+
 from app.admin.bootstrap import main
+from app.admin.provision_production import main as provision_production
 from app.auth.service import OwnerExistsError, create_initial_owner
 from app.core.config import get_settings
 from app.db.session import reset_engine
@@ -231,6 +234,75 @@ def test_provisioning_refuses_a_second_owner(monkeypatch, isolated_database_url:
     engine.dispose()
     monkeypatch.setattr(sys, "argv", ["bootstrap", "--password", PASSWORD])
     assert main() == 2
+
+
+def _production_env(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_ENABLED", "false")
+    monkeypatch.setenv("CHECKOUT_SIMULATION_DEMO_UNIT_PRICE_CENTS", "")
+    monkeypatch.setenv("EMAIL_TRANSPORT", "smtp")
+    monkeypatch.setenv("SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("EMAIL_FROM", "Autonovent <orders@example.com>")
+    get_settings.cache_clear()
+    reset_engine()
+
+
+def test_production_provision_refuses_development(monkeypatch, isolated_database_url: str) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    monkeypatch.setenv("APP_ENV", "development")
+    get_settings.cache_clear()
+    monkeypatch.setattr(sys, "argv", ["provision_production"])
+
+    def forbidden(_prompt: str) -> str:
+        raise AssertionError("prompts must not run outside production")
+
+    assert provision_production(read_email=forbidden, read_password=forbidden) == 2
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        assert session.scalar(select(AdminUser.id)) is None
+    engine.dispose()
+
+
+def test_production_provision_refuses_arguments(monkeypatch, isolated_database_url: str) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    _production_env(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["provision_production", "--password", PASSWORD])
+    assert provision_production() == 2
+
+
+def test_production_provision_creates_one_owner(monkeypatch, isolated_database_url: str) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    _production_env(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["provision_production"])
+    answers = iter([EMAIL, "second-fixture@example.com"])
+    passwords = iter([PASSWORD, PASSWORD, PASSWORD, PASSWORD])
+    assert provision_production(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 0
+    assert provision_production(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 1
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        owners = session.scalars(select(AdminUser)).all()
+    engine.dispose()
+    assert len(owners) == 1
+    assert owners[0].email == EMAIL
+    assert owners[0].role == "owner"
+    assert PASSWORD not in owners[0].password_hash
+
+
+def test_production_provision_hides_database_errors(monkeypatch, isolated_database_url: str, capsys) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    _production_env(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["provision_production"])
+
+    def explode():
+        raise OperationalError("SELECT", {}, Exception("postgresql://user:secret@db.example:25060/omniprod"))
+
+    monkeypatch.setattr("app.admin.provision_production.get_engine", explode)
+    assert provision_production(read_email=lambda _prompt: EMAIL, read_password=lambda _prompt: PASSWORD) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "secret" not in captured.err
+    assert "postgresql://" not in captured.err
+    assert "The database could not be reached." in captured.err
 
 
 def test_registration_is_not_public() -> None:
