@@ -7,7 +7,7 @@ from app.models.audit import ProductAuditEvent
 from app.models.auth import AdminSession, LoginAttempt
 from app.models.order import Order, OrderItem, OrderStatusEvent
 from app.models.payment import Payment
-from app.models.product import Product
+from app.models.product import Product, ProductImage, ProductSlugAlias, ProductSpecification
 from app.models.shipment import Shipment
 
 __all__ = [
@@ -21,6 +21,9 @@ __all__ = [
     "OrderStatusEvent",
     "Payment",
     "Product",
+    "ProductImage",
+    "ProductSlugAlias",
+    "ProductSpecification",
     "ProductAuditEvent",
     "Shipment",
 ]

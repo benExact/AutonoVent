@@ -18,10 +18,10 @@
 
   function productPath(product) {
     const slug = product && typeof product.slug === "string" ? product.slug.trim().toLowerCase() : "";
-    if (slug === "autonovent") {
-      return "product.html";
+    if (!slug) {
+      return "products.html";
     }
-    return "product.html?product=" + encodeURIComponent(slug || product.id || "");
+    return "/product/" + encodeURIComponent(slug);
   }
 
   function imageSource(product) {

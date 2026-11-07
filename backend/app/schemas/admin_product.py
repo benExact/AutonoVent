@@ -34,11 +34,26 @@ def storage_fields(model: BaseModel, *, exclude_unset: bool) -> dict[str, object
     return data
 
 
+class SpecificationWrite(BaseModel):
+    label: str = Field(max_length=80)
+    value: str = Field(max_length=200)
+
+    @field_validator("label", "value")
+    @classmethod
+    def required_text(cls, value: str, info) -> str:
+        cleaned = _clean_text(value, limit=80 if info.field_name == "label" else 200, label=info.field_name or "field", required=True)
+        assert cleaned is not None
+        return cleaned
+
+
 class ProductWrite(BaseModel):
     name: str = Field(max_length=160)
     slug: str = Field(max_length=80)
     description: str | None = Field(default=None, max_length=4000)
+    short_description: str | None = Field(default=None, max_length=280)
     sku: str | None = Field(default=None, max_length=64)
+    in_stock: bool = True
+    specifications: list[SpecificationWrite] = Field(default_factory=list)
     unit_price_cents: int | None = Field(default=None, strict=True)
     price_rands: str | None = None
     currency: str = "ZAR"
@@ -59,11 +74,19 @@ class ProductWrite(BaseModel):
             raise ValueError("Use a slug made of lowercase letters, numbers, and hyphens.")
         return cleaned
 
-    @field_validator("description", "sku")
+    @field_validator("description", "short_description", "sku")
     @classmethod
     def optional_text(cls, value: str | None, info) -> str | None:
-        limit = 4000 if info.field_name == "description" else 64
+        limits = {"description": 4000, "short_description": 280, "sku": 64}
+        limit = limits.get(info.field_name or "", 64)
         return _clean_text(value, limit=limit, label=info.field_name or "field", required=False)
+
+    @field_validator("specifications")
+    @classmethod
+    def specification_limit(cls, value: list[SpecificationWrite]) -> list[SpecificationWrite]:
+        if len(value) > 24:
+            raise ValueError("A product can have up to 24 specifications.")
+        return value
 
     @field_validator("currency")
     @classmethod
@@ -88,14 +111,19 @@ class ProductWrite(BaseModel):
         return value.strip()
 
     def stored(self) -> dict[str, object]:
-        return storage_fields(self, exclude_unset=False)
+        data = storage_fields(self, exclude_unset=False)
+        data.pop("specifications", None)
+        return data
 
 
 class ProductPatch(BaseModel):
     name: str | None = Field(default=None, max_length=160)
     slug: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=4000)
+    short_description: str | None = Field(default=None, max_length=280)
     sku: str | None = Field(default=None, max_length=64)
+    in_stock: bool | None = None
+    specifications: list[SpecificationWrite] | None = None
     unit_price_cents: int | None = Field(default=None, strict=True)
     price_rands: str | None = None
     currency: str | None = None
@@ -120,11 +148,19 @@ class ProductPatch(BaseModel):
             raise ValueError("Use a slug made of lowercase letters, numbers, and hyphens.")
         return cleaned
 
-    @field_validator("description", "sku")
+    @field_validator("description", "short_description", "sku")
     @classmethod
     def optional_text(cls, value: str | None, info) -> str | None:
-        limit = 4000 if info.field_name == "description" else 64
+        limits = {"description": 4000, "short_description": 280, "sku": 64}
+        limit = limits.get(info.field_name or "", 64)
         return _clean_text(value, limit=limit, label=info.field_name or "field", required=False)
+
+    @field_validator("specifications")
+    @classmethod
+    def specification_limit(cls, value: list[SpecificationWrite] | None) -> list[SpecificationWrite] | None:
+        if value is not None and len(value) > 24:
+            raise ValueError("A product can have up to 24 specifications.")
+        return value
 
     @field_validator("currency")
     @classmethod
@@ -151,7 +187,27 @@ class ProductPatch(BaseModel):
         return value.strip()
 
     def stored(self) -> dict[str, object]:
-        return storage_fields(self, exclude_unset=True)
+        data = storage_fields(self, exclude_unset=True)
+        data.pop("specifications", None)
+        return data
+
+
+class ManagedImage(BaseModel):
+    id: uuid.UUID
+    url: str
+    thumb_url: str | None = None
+    position: int
+
+
+class ManagedSpecification(BaseModel):
+    id: uuid.UUID
+    label: str
+    value: str
+    position: int
+
+
+class ImageOrder(BaseModel):
+    image_ids: list[uuid.UUID]
 
 
 class ManagedProduct(BaseModel):
@@ -159,11 +215,15 @@ class ManagedProduct(BaseModel):
     slug: str
     name: str
     description: str | None
+    short_description: str | None = None
     sku: str | None
     unit_price_cents: int | None
     currency: str
     active: bool
+    in_stock: bool = True
     image_url: str | None
+    images: list[ManagedImage] = []
+    specifications: list[ManagedSpecification] = []
     created_at: datetime
     updated_at: datetime
 

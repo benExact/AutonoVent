@@ -45,8 +45,9 @@
             <input id="product-name" name="name" type="text" maxlength="160" required>
           </div>
           <div class="field">
-            <label for="product-slug">Slug</label>
+            <label for="product-slug">URL slug</label>
             <input id="product-slug" name="slug" type="text" maxlength="80" required>
+            <p class="field-note">Used in /product/your-slug. It is filled from the name until you edit it.</p>
           </div>
           <div class="field">
             <label for="product-sku">SKU</label>
@@ -61,21 +62,35 @@
             <p class="field-note">Enter the price in rands, such as 1550.00. It must be more than R0.00.</p>
           </div>
           <div class="field">
-            <label for="product-description">Description</label>
+            <label for="product-summary">Short description</label>
+            <textarea id="product-summary" name="short_description" maxlength="280"></textarea>
+          </div>
+          <div class="field">
+            <label for="product-description">Full description</label>
             <textarea id="product-description" name="description" maxlength="4000"></textarea>
           </div>
           <div class="field">
-            <label for="product-image">Product image</label>
-            <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
-            <p class="field-note">One JPEG, PNG, or WebP image, up to 5 MB.</p>
-            <figure class="owner-product-preview">
-              <img data-product-preview alt="" hidden>
-            </figure>
+            <label for="product-stock">Stock</label>
+            <select id="product-stock" name="in_stock">
+              <option value="true">In stock</option>
+              <option value="false">Out of stock</option>
+            </select>
+          </div>
+          <fieldset class="field" data-spec-list>
+            <legend>Specifications</legend>
+            <div data-spec-rows></div>
+            <button class="button button--secondary" type="button" data-spec-add>Add specification</button>
+          </fieldset>
+          <div class="field">
+            <label for="product-image">Product images</label>
+            <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+            <p class="field-note" data-product-image-count>Up to 4 JPEG, PNG, or WebP images, 5 MB each. The first image is the primary image.</p>
+            <div class="owner-gallery" data-product-gallery></div>
           </div>
           <div class="field">
             <label for="product-active">
               <input id="product-active" name="active" type="checkbox">
-              Active
+              Published
             </label>
           </div>
           <div class="button-row">

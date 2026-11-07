@@ -11,8 +11,8 @@
   const endpoint = base.replace(/\/$/, "");
   const moneyInput = window.AutonoventMoney;
   let editingId = "";
-  let selectedFile = null;
-  let previewUrl = "";
+  let selectedFiles = [];
+  let slugEdited = false;
   let saving = false;
   let deleting = false;
   const maxImageBytes = 5 * 1024 * 1024;
@@ -91,27 +91,56 @@
     return "../assets/images/product-placeholder.svg";
   }
 
+  function slugify(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+  }
+
   function clearPreview() {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      previewUrl = "";
-    }
-    selectedFile = null;
-    const preview = document.querySelector("[data-product-preview]");
-    if (preview) {
-      preview.hidden = true;
-      preview.removeAttribute("src");
+    selectedFiles = [];
+    const input = document.querySelector("#product-image");
+    if (input) {
+      input.value = "";
     }
   }
 
-  function showPreview(src, alt) {
-    const preview = document.querySelector("[data-product-preview]");
-    if (!preview) {
+  function specRows() {
+    return [...document.querySelectorAll("[data-spec-row]")].map((row) => ({
+      label: row.querySelector("[data-spec-label]").value.trim(),
+      value: row.querySelector("[data-spec-value]").value.trim(),
+    })).filter((row) => row.label || row.value);
+  }
+
+  function addSpecRow(label, value) {
+    const host = document.querySelector("[data-spec-rows]");
+    if (!host) {
       return;
     }
-    preview.src = src;
-    preview.alt = alt;
-    preview.hidden = false;
+    const row = document.createElement("div");
+    row.className = "spec-row";
+    row.setAttribute("data-spec-row", "");
+    const name = document.createElement("input");
+    name.type = "text";
+    name.maxLength = 80;
+    name.placeholder = "Name";
+    name.setAttribute("data-spec-label", "");
+    name.value = label || "";
+    const detail = document.createElement("input");
+    detail.type = "text";
+    detail.maxLength = 200;
+    detail.placeholder = "Value";
+    detail.setAttribute("data-spec-value", "");
+    detail.value = value || "";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "button button--secondary";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => row.remove());
+    row.append(name, detail, remove);
+    host.append(row);
   }
 
   function renderProducts(products) {
@@ -184,13 +213,21 @@
     form.reset();
     editingId = product.id;
     heading.textContent = "Edit product";
+    slugEdited = true;
     form.name.value = product.name;
     form.slug.value = product.slug;
+    form.short_description.value = product.short_description || "";
     form.description.value = product.description || "";
     form.sku.value = product.sku || "";
     form.price_rands.value = moneyInput.randsFromCents(product.unit_price_cents);
+    form.in_stock.value = product.in_stock === false ? "false" : "true";
     form.active.checked = product.active === true;
-    showPreview(imageSource(product), product.name);
+    const specs = document.querySelector("[data-spec-rows]");
+    if (specs) {
+      specs.replaceChildren();
+    }
+    (product.specifications || []).forEach((item) => addSpecRow(item.label, item.value));
+    renderGallery(product);
     const remove = document.querySelector("[data-product-form] [data-product-delete]");
     if (remove) {
       remove.hidden = false;
@@ -245,8 +282,17 @@
       return;
     }
     editingId = "";
+    slugEdited = false;
     heading.textContent = "Add product";
     form.reset();
+    const specs = document.querySelector("[data-spec-rows]");
+    if (specs) {
+      specs.replaceChildren();
+    }
+    const gallery = document.querySelector("[data-product-gallery]");
+    if (gallery) {
+      gallery.replaceChildren();
+    }
     const remove = form.querySelector("[data-product-delete]");
     if (remove) {
       remove.hidden = true;
@@ -360,6 +406,114 @@
     });
   }
 
+  function renderGallery(product) {
+    const host = document.querySelector("[data-product-gallery]");
+    const count = document.querySelector("[data-product-image-count]");
+    if (!host) {
+      return;
+    }
+    host.replaceChildren();
+    const images = Array.isArray(product.images) ? product.images : [];
+    if (count) {
+      count.textContent = images.length + " of 4 images. The first image is the primary image.";
+    }
+    images.forEach((image, index) => {
+      const card = document.createElement("figure");
+      card.className = "owner-gallery__item";
+      const picture = document.createElement("img");
+      picture.src = imageSource({ image_url: image.thumb_url || image.url });
+      picture.alt = "";
+      picture.width = 160;
+      picture.height = 120;
+      const actions = document.createElement("div");
+      actions.className = "button-row";
+      if (index === 0) {
+        const primary = document.createElement("span");
+        primary.textContent = "Primary";
+        actions.append(primary);
+      }
+      if (index > 0) {
+        const earlier = document.createElement("button");
+        earlier.type = "button";
+        earlier.className = "button button--secondary";
+        earlier.textContent = "Move earlier";
+        earlier.addEventListener("click", () => moveImage(product, index, index - 1));
+        actions.append(earlier);
+      }
+      const replace = document.createElement("input");
+      replace.type = "file";
+      replace.accept = "image/jpeg,image/png,image/webp";
+      replace.setAttribute("aria-label", "Replace image");
+      replace.addEventListener("change", () => {
+        const file = replace.files && replace.files[0];
+        const problem = chosenImage(file);
+        if (problem) {
+          setStatus(document.querySelector("[data-product-save]"), problem);
+          return;
+        }
+        if (file) {
+          replaceImage(product, image.id, file);
+        }
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button button--secondary";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => deleteImage(product, image.id));
+      actions.append(replace, remove);
+      card.append(picture, actions);
+      host.append(card);
+    });
+  }
+
+  function moveImage(product, from, to) {
+    const ids = product.images.map((image) => image.id);
+    const moved = ids.splice(from, 1)[0];
+    ids.splice(to, 0, moved);
+    api("/api/v1/admin/products/" + encodeURIComponent(product.id) + "/images/order", {
+      method: "PUT",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrfFromCookie() },
+      body: JSON.stringify({ image_ids: ids }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        setStatus(document.querySelector("[data-product-save]"), await detailMessage(response));
+        return;
+      }
+      fillForm(await response.json());
+    });
+  }
+
+  function replaceImage(product, imageId, file) {
+    const data = new FormData();
+    data.append("image", file);
+    api("/api/v1/admin/products/" + encodeURIComponent(product.id) + "/images/" + encodeURIComponent(imageId), {
+      method: "POST",
+      headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+      body: data,
+    }).then(async (response) => {
+      if (!response.ok) {
+        setStatus(document.querySelector("[data-product-save]"), await detailMessage(response));
+        return;
+      }
+      fillForm(await response.json());
+      loadProducts();
+    });
+  }
+
+  function deleteImage(product, imageId) {
+    api("/api/v1/admin/products/" + encodeURIComponent(product.id) + "/images/" + encodeURIComponent(imageId), {
+      method: "DELETE",
+      headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+    }).then(async (response) => {
+      if (!response.ok) {
+        setStatus(document.querySelector("[data-product-save]"), await detailMessage(response));
+        return;
+      }
+      fillForm(await response.json());
+      loadProducts();
+    });
+  }
+
   function bindProductForm() {
     const form = document.querySelector("[data-product-form]");
     const clear = document.querySelector("[data-product-clear]");
@@ -385,25 +539,28 @@
     }
     if (imageInput) {
       imageInput.addEventListener("change", () => {
-        const file = imageInput.files && imageInput.files[0];
-        const problem = chosenImage(file);
+        selectedFiles = [...imageInput.files];
+        const problem = selectedFiles.map(chosenImage).find(Boolean);
         if (problem) {
           imageInput.value = "";
-          selectedFile = null;
+          selectedFiles = [];
           setStatus(result, problem);
           return;
         }
-        if (!file) {
-          return;
-        }
-        if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
-        }
-        selectedFile = file;
-        previewUrl = URL.createObjectURL(file);
-        showPreview(previewUrl, "Selected product image");
-        setStatus(result, "");
+        setStatus(result, selectedFiles.length ? selectedFiles.length + " image" + (selectedFiles.length === 1 ? "" : "s") + " selected." : "");
       });
+    }
+    form.name.addEventListener("input", () => {
+      if (!slugEdited && !editingId) {
+        form.slug.value = slugify(form.name.value);
+      }
+    });
+    form.slug.addEventListener("input", () => {
+      slugEdited = true;
+    });
+    const addSpec = document.querySelector("[data-spec-add]");
+    if (addSpec) {
+      addSpec.addEventListener("click", () => addSpecRow("", ""));
     }
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -417,26 +574,33 @@
         setStatus(result, error.message);
         return;
       }
-      const imageProblem = chosenImage(selectedFile);
+      const imageProblem = selectedFiles.map(chosenImage).find(Boolean);
       if (imageProblem) {
         setStatus(result, imageProblem);
+        return;
+      }
+      const specifications = specRows();
+      if (specifications.some((row) => !row.label || !row.value)) {
+        setStatus(result, "Enter both a name and a value for each specification.");
         return;
       }
       const body = {
         name: form.name.value,
         slug: form.slug.value,
+        short_description: form.short_description.value,
         description: form.description.value,
         sku: form.sku.value,
         price_rands: form.price_rands.value.trim(),
         currency: "ZAR",
         active: form.active.checked,
+        in_stock: form.in_stock.value !== "false",
+        specifications: specifications,
       };
       if (!price) {
         setStatus(result, "Enter a selling price greater than R0.00.");
         return;
       }
       const path = editingId ? "/api/v1/admin/products/" + encodeURIComponent(editingId) : "/api/v1/admin/products";
-      const file = selectedFile;
       saving = true;
       if (submit) {
         submit.disabled = true;
@@ -460,27 +624,25 @@
           setStatus(result, await detailMessage(response));
           return;
         }
-        const saved = await response.json();
-        if (!file) {
-          fillForm(saved);
-          setStatus(result, "Saved.");
-          loadProducts();
-          return;
+        let saved = await response.json();
+        for (const pending of selectedFiles) {
+          const data = new FormData();
+          data.append("image", pending);
+          const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/images", {
+            method: "POST",
+            headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+            body: data,
+          });
+          if (!uploaded.ok) {
+            setStatus(result, "The product was saved, but an image was not. " + await detailMessage(uploaded));
+            fillForm(saved);
+            loadProducts();
+            return;
+          }
+          saved = await uploaded.json();
         }
-        const data = new FormData();
-        data.append("image", file);
-        const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/image", {
-          method: "POST",
-          headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
-          body: data,
-        });
-        if (!uploaded.ok) {
-          setStatus(result, "The product was saved, but the image was not. " + await detailMessage(uploaded));
-          fillForm(saved);
-          loadProducts();
-          return;
-        }
-        fillForm(await uploaded.json());
+        clearPreview();
+        fillForm(saved);
         setStatus(result, "Saved.");
         loadProducts();
       }).catch(() => {

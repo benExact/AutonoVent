@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models.product import Product
+from app.models.product import ProductImage, ProductSlugAlias, ProductSpecification
+from app.products.gallery import images_by_product, specifications_by_product
 from app.products.images import public_image_url
-from app.schemas.product import CatalogueResponse, PublicProduct
+from app.schemas.product import CatalogueResponse, PublicImage, PublicProduct, PublicSpecification
 
 router = APIRouter()
 
@@ -52,6 +54,7 @@ def list_products(session: Session = Depends(get_catalogue_session)) -> Catalogu
         rows = session.scalars(statement).all()
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail="The catalogue is temporarily unavailable.") from None
+    gallery, details = _load_related(session, list(rows))
     products: list[PublicProduct] = []
     for row in rows:
         if row.unit_price_cents is not None:
@@ -62,18 +65,80 @@ def list_products(session: Session = Depends(get_catalogue_session)) -> Catalogu
             price_is_demo = True
         else:
             continue
-        products.append(
-            PublicProduct(
-                id=row.id,
-                slug=row.slug,
-                name=row.name,
-                description=row.description,
-                sku=row.sku,
-                unit_price_cents=cents,
-                currency=row.currency,
-                active=row.active,
-                price_is_demo=price_is_demo,
-                image_url=public_image_url(row.image_filename),
-            )
-        )
+        images = gallery.get(row.id, [])
+        specs = details.get(row.id, [])
+        products.append(_public_product(row, cents, price_is_demo, images, specs))
     return CatalogueResponse(products=products)
+
+
+def _load_related(session: Session, rows: list[Product]) -> tuple[dict, dict]:
+    ids = [row.id for row in rows]
+    return images_by_product(session, ids), specifications_by_product(session, ids)
+
+
+def _public_images(rows: list[ProductImage]) -> list[PublicImage]:
+    images: list[PublicImage] = []
+    for row in rows:
+        url = public_image_url(row.stored_name)
+        if url is None:
+            continue
+        images.append(PublicImage(url=url, thumb_url=public_image_url(row.thumb_name), position=row.position))
+    return images
+
+
+def _card_image(images: list[PublicImage], legacy: str | None) -> str | None:
+    if images:
+        return images[0].thumb_url or images[0].url
+    return public_image_url(legacy)
+
+
+def _public_product(row: Product, cents: int, price_is_demo: bool, images: list[ProductImage], specs: list[ProductSpecification]) -> PublicProduct:
+    public_images = _public_images(images)
+    return PublicProduct(
+        id=row.id,
+        slug=row.slug,
+        name=row.name,
+        description=row.description,
+        short_description=row.short_description,
+        sku=row.sku,
+        unit_price_cents=cents,
+        currency=row.currency,
+        active=row.active,
+        in_stock=row.in_stock,
+        price_is_demo=price_is_demo,
+        image_url=_card_image(public_images, row.image_filename),
+        images=public_images,
+        specifications=[PublicSpecification(label=item.label, value=item.value) for item in specs],
+    )
+
+
+def _published(row: Product | None, settings: Settings | None) -> tuple[Product, int, bool] | None:
+    if row is None or not row.active or row.archived_at is not None:
+        return None
+    demo_cents = settings.checkout_simulation_demo_unit_price_cents if settings is not None and settings.checkout_simulation_active else None
+    if row.unit_price_cents is not None:
+        return row, row.unit_price_cents, False
+    if demo_cents is not None:
+        return row, demo_cents, True
+    return None
+
+
+@router.get("/products/{slug}", response_model=PublicProduct)
+def product_by_slug(slug: str, session: Session = Depends(get_catalogue_session)) -> PublicProduct:
+    cleaned = slug.strip().lower()
+    settings = _catalogue_settings()
+    try:
+        row = session.scalar(select(Product).where(Product.slug == cleaned))
+        if row is None:
+            alias = session.get(ProductSlugAlias, cleaned)
+            row = session.get(Product, alias.product_id) if alias is not None else None
+        published = _published(row, settings)
+        if published is None or published[0].archived_at is not None:
+            raise HTTPException(status_code=404, detail="The product is not available.")
+        product, cents, price_is_demo = published
+        gallery, details = _load_related(session, [product])
+    except HTTPException:
+        raise
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="The catalogue is temporarily unavailable.") from None
+    return _public_product(product, cents, price_is_demo, gallery.get(product.id, []), details.get(product.id, []))

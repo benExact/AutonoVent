@@ -246,13 +246,28 @@ test("catalogue search matches part of a name, description or SKU and can be sor
   assert.deepEqual(search.sortProducts(products, "featured").map((product) => product.name), ["Autonovent", "Parcel Tape"]);
   const home = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   const shop = fs.readFileSync(path.join(__dirname, "..", "products.html"), "utf8");
+  const catalogue = fs.readFileSync(path.join(__dirname, "catalogue.js"), "utf8");
   assert.match(home, /Shop All Products/);
   assert.match(home, /data-store-hero/);
   assert.match(home, /href="products\.html"/);
   assert.doesNotMatch(home, /data-catalogue-list/);
   assert.match(shop, /data-catalogue-search/);
-  assert.match(shop, /href="product\.html">Autonovent/);
+  assert.match(shop, /data-catalogue-list/);
+  assert.match(catalogue, /\/product\//);
   assert.doesNotMatch(home, /name="robots" content="noindex/);
+});
+
+test("pretty product urls use one template and leave the API alone", () => {
+  const root = path.join(__dirname, "..");
+  const page = fs.readFileSync(path.join(root, "product.html"), "utf8");
+  const script = fs.readFileSync(path.join(__dirname, "product-page.js"), "utf8");
+  const nginx = fs.readFileSync(path.join(root, "deploy", "nginx", "product-slug.conf"), "utf8");
+  assert.match(page, /data-product-page/);
+  assert.match(script, /\/api\/v1\/products\//);
+  assert.match(script, /This product is not available/);
+  assert.match(nginx, /location \^~ \/api\//);
+  assert.match(nginx, /try_files \/product\.html =404/);
+  assert.match(nginx, /\/product\/\[a-z0-9\]/);
 });
 
 test("cart items show the catalogue image beside the existing controls", () => {

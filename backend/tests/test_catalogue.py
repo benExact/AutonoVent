@@ -21,6 +21,10 @@ PUBLIC_FIELDS = {
     "active",
     "price_is_demo",
     "image_url",
+    "short_description",
+    "in_stock",
+    "images",
+    "specifications",
 }
 
 

@@ -298,6 +298,8 @@ def _priced_lines(session: Session, settings: Settings, lines: list[OrderLine]) 
         resolved = applicable_price(product, settings) if product is not None else None
         if product is None or resolved is None:
             raise CheckoutValidationError("An item is not available at a confirmed price.")
+        if product.in_stock is False:
+            raise CheckoutValidationError("An item is out of stock.")
         unit_price, price_is_demo = resolved
         if unit_price > 2_000_000_000 // line.quantity:
             raise CheckoutValidationError("The line total is too large.")

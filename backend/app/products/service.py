@@ -7,10 +7,26 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.audit import ProductAuditEvent
-from app.models.product import Product
+from pathlib import Path
 
-AUDITED_FIELDS = ("name", "slug", "description", "sku", "unit_price_cents", "currency", "active", "archived_at", "image_filename")
+from app.models.audit import ProductAuditEvent
+from app.models.product import Product, ProductSlugAlias
+from app.products.gallery import rewrite_slug_names
+from app.products.images import ImageRejected, relocate_slug_directory
+
+AUDITED_FIELDS = (
+    "name",
+    "slug",
+    "description",
+    "short_description",
+    "sku",
+    "unit_price_cents",
+    "currency",
+    "active",
+    "in_stock",
+    "archived_at",
+    "image_filename",
+)
 
 
 class ProductError(Exception):
@@ -53,12 +69,35 @@ def create_product(session: Session, fields: dict[str, object], actor: str) -> P
     return product
 
 
-def update_product(session: Session, product_id: uuid.UUID, fields: dict[str, object], actor: str) -> Product:
+def update_product(
+    session: Session,
+    product_id: uuid.UUID,
+    fields: dict[str, object],
+    actor: str,
+    image_root: Path | None = None,
+) -> Product:
     product = get_product(session, product_id)
     if product is None:
         raise ProductNotFound("The product does not exist.")
     previous = {field: getattr(product, field) for field in AUDITED_FIELDS}
     changes = _changes(previous, fields, include_unchanged=False)
+    old_slug = product.slug
+    new_slug = fields.get("slug", old_slug)
+    moved = False
+    if isinstance(new_slug, str) and new_slug != old_slug:
+        owned_alias = session.get(ProductSlugAlias, new_slug)
+        if owned_alias is not None and owned_alias.product_id == product.id:
+            session.delete(owned_alias)
+            session.flush()
+        session.add(ProductSlugAlias(slug=old_slug, product_id=product.id))
+        rewrite_slug_names(session, product.id, old_slug, new_slug)
+        if image_root is not None:
+            try:
+                relocate_slug_directory(image_root, old_slug, new_slug)
+            except ImageRejected as exc:
+                session.rollback()
+                raise ProductError(str(exc)) from None
+            moved = True
     for key, value in fields.items():
         setattr(product, key, value)
     if changes:
@@ -67,6 +106,8 @@ def update_product(session: Session, product_id: uuid.UUID, fields: dict[str, ob
         session.commit()
     except IntegrityError:
         session.rollback()
+        if moved and image_root is not None and isinstance(new_slug, str):
+            relocate_slug_directory(image_root, new_slug, old_slug)
         raise ProductConflict("A product with that slug or SKU already exists.") from None
     return product
 

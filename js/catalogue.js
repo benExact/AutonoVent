@@ -51,10 +51,10 @@
 
   function productPath(product) {
     const slug = productSlug(product);
-    if (slug === "autonovent") {
-      return "product.html";
+    if (!slug) {
+      return "products.html";
     }
-    return "product.html?product=" + encodeURIComponent(slug || (product && product.id) || "");
+    return "/product/" + encodeURIComponent(slug);
   }
 
   function setRobots(content) {
@@ -203,11 +203,20 @@
       priceLine.textContent = product.price_is_demo ? price + " · Test price — not a confirmed selling price" : price;
       item.append(name, priceLine);
 
-      if (typeof product.description === "string" && product.description.trim()) {
+      const summary = typeof product.short_description === "string" && product.short_description.trim()
+        ? product.short_description
+        : product.description;
+      if (typeof summary === "string" && summary.trim()) {
         const description = document.createElement("p");
         description.className = "product-card__summary";
-        description.textContent = product.description;
+        description.textContent = summary;
         item.append(description);
+      }
+      if (product.in_stock === false) {
+        const stock = document.createElement("p");
+        stock.className = "stock-note";
+        stock.textContent = "Out of stock";
+        item.append(stock);
       }
 
       if (typeof product.sku === "string" && product.sku.trim()) {
@@ -227,8 +236,14 @@
       const button = document.createElement("button");
       button.className = "button button--primary";
       button.type = "button";
-      button.textContent = "Add to Cart";
+      button.textContent = product.in_stock === false ? "Out of stock" : "Add to Cart";
+      if (product.in_stock === false) {
+        button.disabled = true;
+      }
       button.addEventListener("click", () => {
+        if (product.in_stock === false) {
+          return;
+        }
         if (!window.AutonoventCart) {
           return;
         }
