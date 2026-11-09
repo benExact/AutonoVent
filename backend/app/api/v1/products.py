@@ -3,6 +3,7 @@
 from collections.abc import Generator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,6 +13,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models.product import Product
 from app.models.product import ProductImage, ProductSlugAlias, ProductSpecification
+from app.products.downloads import download_directory, open_download, public_download_name
 from app.products.gallery import images_by_product, specifications_by_product
 from app.products.images import public_image_url
 from app.schemas.product import CatalogueResponse, PublicImage, PublicProduct, PublicSpecification
@@ -109,7 +111,52 @@ def _public_product(row: Product, cents: int, price_is_demo: bool, images: list[
         image_url=_card_image(public_images, row.image_filename),
         images=public_images,
         specifications=[PublicSpecification(label=item.label, value=item.value) for item in specs],
+        **_public_download(row),
     )
+
+
+def _public_download(row: Product) -> dict[str, object]:
+    available = bool(row.download_enabled and row.download_stored_name)
+    if not available or row.download_stored_name is None:
+        return {
+            "download_enabled": False,
+            "download_label": None,
+            "download_filename": None,
+            "download_size_bytes": None,
+        }
+    return {
+        "download_enabled": True,
+        "download_label": (row.download_button_label or "Download Product File").strip() or "Download Product File",
+        "download_filename": public_download_name(row.download_original_name, row.download_stored_name),
+        "download_size_bytes": row.download_size_bytes,
+    }
+
+
+@router.get("/products/{slug}/download")
+def download_product(slug: str, session: Session = Depends(get_catalogue_session)) -> FileResponse:
+    cleaned = slug.strip().lower()
+    settings = _catalogue_settings()
+    try:
+        row = session.scalar(select(Product).where(Product.slug == cleaned))
+        if row is None:
+            alias = session.get(ProductSlugAlias, cleaned)
+            row = session.get(Product, alias.product_id) if alias is not None else None
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="The catalogue is temporarily unavailable.") from None
+    if row is None or not row.active or row.archived_at is not None or not row.download_enabled:
+        raise HTTPException(status_code=404, detail="The download is not available.")
+    directory = download_directory(settings) if settings is not None else None
+    path = open_download(directory, row.download_stored_name) if directory is not None else None
+    if path is None or row.download_stored_name is None:
+        raise HTTPException(status_code=404, detail="The download is not available.")
+    response = FileResponse(
+        path,
+        media_type=row.download_content_type or "application/octet-stream",
+        filename=public_download_name(row.download_original_name, row.download_stored_name),
+        content_disposition_type="attachment",
+    )
+    response.headers["X-Robots-Tag"] = "noindex"
+    return response
 
 
 def _published(row: Product | None, settings: Settings | None) -> tuple[Product, int, bool] | None:

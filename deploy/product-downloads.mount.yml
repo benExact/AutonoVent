@@ -1,0 +1,9 @@
+# Merge these settings into the existing API service in docker-compose.production.yml.
+# Do not replace that file with this fragment, and do not publish this directory through Nginx.
+#
+# services:
+#   api:
+#     environment:
+#       PRODUCT_DOWNLOAD_DIR: /var/lib/omniprod/product-downloads
+#     volumes:
+#       - /var/lib/omniprod/product-downloads:/var/lib/omniprod/product-downloads

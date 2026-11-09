@@ -25,6 +25,10 @@ PUBLIC_FIELDS = {
     "in_stock",
     "images",
     "specifications",
+    "download_enabled",
+    "download_label",
+    "download_filename",
+    "download_size_bytes",
 }
 
 
@@ -88,6 +92,8 @@ def test_catalogue_returns_only_priced_active_products(monkeypatch, isolated_dat
     assert product["active"] is True
     assert product["price_is_demo"] is False
     assert product["image_url"] is None
+    assert product["download_enabled"] is False
+    assert product["download_filename"] is None
 
     engine = create_engine(isolated_database_url)
     with engine.begin() as connection:

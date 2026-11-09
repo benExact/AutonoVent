@@ -88,6 +88,29 @@
             <div class="owner-gallery" data-product-gallery></div>
             <div class="owner-gallery" data-product-pending></div>
           </div>
+          <fieldset class="field product-downloads-editor" data-product-downloads>
+            <legend>Product Downloads</legend>
+            <label for="product-download-enabled">
+              <input id="product-download-enabled" name="download_enabled" type="checkbox" data-download-enabled>
+              Enable product download
+            </label>
+            <div data-download-controls hidden>
+              <p data-download-state>No downloadable file is configured.</p>
+              <p data-download-name></p>
+              <label for="product-download-file">Downloadable file</label>
+              <input id="product-download-file" name="download" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip">
+              <p class="field-note">PDF, Word, Excel, or ZIP. 25 MB maximum.</p>
+              <button class="button button--secondary" type="button" data-download-remove>Remove file</button>
+              <label for="product-download-label">Button label</label>
+              <input id="product-download-label" name="download_button_label" type="text" maxlength="80" value="Download Product File">
+              <div class="product-downloads product-downloads--preview">
+                <p class="product-downloads__kicker">Preview</p>
+                <button class="download-button" type="button" data-download-preview-button>
+                  <span class="download-button__label">Download Product File</span>
+                </button>
+              </div>
+            </div>
+          </fieldset>
           <div class="field">
             <label for="product-active">
               <input id="product-active" name="active" type="checkbox">

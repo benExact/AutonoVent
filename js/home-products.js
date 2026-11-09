@@ -69,6 +69,12 @@
         description.textContent = product.description.trim();
         item.append(description);
       }
+      if (product.download_enabled === true) {
+        const download = document.createElement("p");
+        download.className = "catalogue-download";
+        download.textContent = "Download available";
+        item.append(download);
+      }
       const actions = document.createElement("div");
       actions.className = "button-row";
       const details = document.createElement("a");

@@ -186,6 +186,42 @@
       section.append(heading, table);
       page.append(section);
     }
+
+    if (product.download_enabled === true) {
+      const resources = document.createElement("section");
+      resources.className = "product-downloads";
+      const heading = document.createElement("h2");
+      heading.textContent = "Product Resources";
+      const intro = document.createElement("p");
+      intro.textContent = "Everything you need, ready to download.";
+      const link = document.createElement("a");
+      link.className = "download-button";
+      link.href = endpoint + "/api/v1/products/" + encodeURIComponent(product.slug) + "/download";
+      const label = document.createElement("span");
+      label.className = "download-button__label";
+      label.textContent = product.download_label || "Download Product File";
+      const icon = document.createElement("span");
+      icon.className = "download-button__icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = "↓";
+      link.append(label, icon);
+      resources.append(heading, intro, link);
+      const meta = [];
+      if (typeof product.download_filename === "string" && product.download_filename.includes(".")) {
+        meta.push(product.download_filename.split(".").pop().toUpperCase());
+      }
+      if (typeof product.download_size_bytes === "number") {
+        const bytes = product.download_size_bytes;
+        meta.push(bytes < 1024 ? bytes + " B" : bytes < 1048576 ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1048576).toFixed(1) + " MB");
+      }
+      if (meta.length) {
+        const note = document.createElement("p");
+        note.className = "product-downloads__meta";
+        note.textContent = meta.join(" · ");
+        resources.append(note);
+      }
+      page.append(resources);
+    }
   }
 
   const slug = requestedSlug();

@@ -33,6 +33,10 @@ class PublicProduct(BaseModel):
     image_url: str | None = None
     images: list[PublicImage] = []
     specifications: list[PublicSpecification] = []
+    download_enabled: bool = False
+    download_label: str | None = None
+    download_filename: str | None = None
+    download_size_bytes: int | None = None
 
 
 class CatalogueResponse(BaseModel):

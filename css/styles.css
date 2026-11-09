@@ -2565,6 +2565,89 @@ body.photo-lightbox-open {
   gap: 0.35rem 1rem;
 }
 
+.catalogue-download {
+  margin: 0;
+  color: var(--color-sage);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.product-downloads {
+  margin-top: 2.5rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(217, 201, 169, 0.35);
+  border-radius: 1.25rem;
+  background: var(--color-forest);
+}
+
+.product-downloads h2,
+.product-downloads__kicker {
+  margin: 0 0 0.35rem;
+}
+
+.product-downloads p {
+  margin: 0 0 1rem;
+  max-width: 36rem;
+}
+
+.product-downloads--preview {
+  margin-top: 1rem;
+}
+
+.download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.85rem 1.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-olive);
+  color: var(--color-offwhite);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.download-button:hover,
+.download-button:focus-visible {
+  background: var(--color-sand);
+  color: var(--color-charcoal);
+  outline: 3px solid var(--color-sand);
+  outline-offset: 3px;
+}
+
+.download-button__icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.product-downloads__meta {
+  margin-top: 0.85rem;
+  margin-bottom: 0;
+  color: var(--color-sage);
+  font-size: 0.9rem;
+}
+
+.product-downloads-editor [data-download-controls]:not([hidden]) {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 40rem) {
+  .product-downloads {
+    padding: 1.1rem;
+  }
+
+  .download-button {
+    width: 100%;
+  }
+}
+
 .owner-gallery,
 .spec-row {
   display: grid;

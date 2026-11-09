@@ -123,6 +123,8 @@ class ProductPatch(BaseModel):
     short_description: str | None = Field(default=None, max_length=280)
     sku: str | None = Field(default=None, max_length=64)
     in_stock: bool | None = None
+    download_enabled: bool | None = None
+    download_button_label: str | None = Field(default=None, max_length=80)
     specifications: list[SpecificationWrite] | None = None
     unit_price_cents: int | None = Field(default=None, strict=True)
     price_rands: str | None = None
@@ -154,6 +156,11 @@ class ProductPatch(BaseModel):
         limits = {"description": 4000, "short_description": 280, "sku": 64}
         limit = limits.get(info.field_name or "", 64)
         return _clean_text(value, limit=limit, label=info.field_name or "field", required=False)
+
+    @field_validator("download_button_label")
+    @classmethod
+    def button_label(cls, value: str | None) -> str | None:
+        return _clean_text(value, limit=80, label="button label", required=False)
 
     @field_validator("specifications")
     @classmethod
@@ -224,6 +231,11 @@ class ManagedProduct(BaseModel):
     image_url: str | None
     images: list[ManagedImage] = []
     specifications: list[ManagedSpecification] = []
+    download_enabled: bool = False
+    download_configured: bool = False
+    download_original_name: str | None = None
+    download_button_label: str | None = None
+    download_size_bytes: int | None = None
     created_at: datetime
     updated_at: datetime
 

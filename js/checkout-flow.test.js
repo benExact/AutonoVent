@@ -264,6 +264,8 @@ test("pretty product urls use one template and leave the API alone", () => {
   const nginx = fs.readFileSync(path.join(root, "deploy", "nginx", "product-slug.conf"), "utf8");
   assert.match(page, /data-product-page/);
   assert.match(script, /\/api\/v1\/products\//);
+  assert.match(script, /Product Resources/);
+  assert.match(script, /download_enabled/);
   assert.match(script, /This product is not available/);
   assert.match(nginx, /location \^~ \/api\//);
   assert.match(nginx, /try_files \/product\.html =404/);

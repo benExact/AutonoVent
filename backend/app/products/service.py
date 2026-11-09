@@ -26,6 +26,9 @@ AUDITED_FIELDS = (
     "in_stock",
     "archived_at",
     "image_filename",
+    "download_enabled",
+    "download_original_name",
+    "download_button_label",
 )
 
 
@@ -83,6 +86,9 @@ def update_product(
     changes = _changes(previous, fields, include_unchanged=False)
     old_slug = product.slug
     new_slug = fields.get("slug", old_slug)
+    stored_name = fields.get("download_stored_name", product.download_stored_name)
+    if fields.get("download_enabled") is True and not stored_name:
+        raise ProductError("Upload a file before enabling the download.")
     moved = False
     if isinstance(new_slug, str) and new_slug != old_slug:
         owned_alias = session.get(ProductSlugAlias, new_slug)

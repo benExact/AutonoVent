@@ -12,6 +12,10 @@
   const moneyInput = window.AutonoventMoney;
   let editingId = "";
   let pendingImages = [];
+  let pendingDownload = null;
+  let removeDownload = false;
+  let downloadConfigured = false;
+  let downloadName = "";
   let savedImageCount = 0;
   let slugEdited = false;
   let saving = false;
@@ -268,6 +272,7 @@
     }
     (product.specifications || []).forEach((item) => addSpecRow(item.label, item.value));
     renderGallery(product);
+    renderDownload(product);
     const remove = document.querySelector("[data-product-form] [data-product-delete]");
     if (remove) {
       remove.hidden = false;
@@ -340,6 +345,7 @@
       remove.disabled = false;
     }
     clearPreview();
+    renderDownload(null);
     setStatus(document.querySelector("[data-product-save]"), "");
     const history = document.querySelector("[data-product-audit]");
     if (history) {
@@ -553,6 +559,106 @@
     });
   }
 
+  function renderDownload(product) {
+    pendingDownload = null;
+    removeDownload = false;
+    downloadConfigured = Boolean(product && product.download_configured);
+    downloadName = product && product.download_original_name ? product.download_original_name : "";
+    const enabled = document.querySelector("[data-download-enabled]");
+    const label = document.querySelector("#product-download-label");
+    const file = document.querySelector("#product-download-file");
+    if (file) {
+      file.value = "";
+    }
+    if (enabled) {
+      enabled.checked = Boolean(product && product.download_enabled);
+    }
+    if (label) {
+      label.value = product && product.download_button_label ? product.download_button_label : "Download Product File";
+    }
+    syncDownloadControls();
+  }
+
+  function syncDownloadControls() {
+    const enabled = document.querySelector("[data-download-enabled]");
+    const controls = document.querySelector("[data-download-controls]");
+    const state = document.querySelector("[data-download-state]");
+    const name = document.querySelector("[data-download-name]");
+    const preview = document.querySelector("[data-download-preview-button] .download-button__label");
+    const label = document.querySelector("#product-download-label");
+    if (controls && enabled) {
+      controls.hidden = !enabled.checked;
+    }
+    if (preview && label) {
+      preview.textContent = label.value.trim() || "Download Product File";
+    }
+    if (!state || !name) {
+      return;
+    }
+    if (pendingDownload) {
+      state.textContent = "A new file will be saved with this product.";
+      name.textContent = pendingDownload.name;
+      return;
+    }
+    if (removeDownload) {
+      state.textContent = "The downloadable file will be removed when you save.";
+      name.textContent = "";
+      return;
+    }
+    if (downloadConfigured) {
+      state.textContent = "A downloadable file is configured.";
+      name.textContent = downloadName;
+      return;
+    }
+    state.textContent = "No downloadable file is configured.";
+    name.textContent = "";
+  }
+
+  async function applyDownload(saved) {
+    const form = document.querySelector("[data-product-form]");
+    const enabled = Boolean(form && form.download_enabled.checked);
+    const label = form && form.download_button_label.value.trim() ? form.download_button_label.value.trim() : "Download Product File";
+    if (removeDownload && !pendingDownload) {
+      const removed = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/download", {
+        method: "DELETE",
+        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+      });
+      if (!removed.ok) {
+        throw new Error(await detailMessage(removed));
+      }
+      saved = await removed.json();
+    }
+    if (pendingDownload) {
+      const data = new FormData();
+      data.append("download", pendingDownload);
+      const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/download", {
+        method: "POST",
+        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+        body: data,
+      });
+      if (!uploaded.ok) {
+        throw new Error(await detailMessage(uploaded));
+      }
+      saved = await uploaded.json();
+    }
+    const updated = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id), {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfFromCookie(),
+      },
+      body: JSON.stringify({
+        download_enabled: enabled && saved.download_configured === true,
+        download_button_label: label,
+      }),
+    });
+    if (!updated.ok) {
+      throw new Error(await detailMessage(updated));
+    }
+    return updated.json();
+  }
+
   function bindProductForm() {
     const form = document.querySelector("[data-product-form]");
     const clear = document.querySelector("[data-product-clear]");
@@ -610,6 +716,35 @@
     form.slug.addEventListener("input", () => {
       slugEdited = true;
     });
+    const downloadEnabled = form.querySelector("[data-download-enabled]");
+    const downloadFile = form.querySelector("#product-download-file");
+    const downloadLabel = form.querySelector("#product-download-label");
+    const downloadRemove = form.querySelector("[data-download-remove]");
+    if (downloadEnabled) {
+      downloadEnabled.addEventListener("change", syncDownloadControls);
+    }
+    if (downloadLabel) {
+      downloadLabel.addEventListener("input", syncDownloadControls);
+    }
+    if (downloadFile) {
+      downloadFile.addEventListener("change", () => {
+        pendingDownload = downloadFile.files && downloadFile.files[0] ? downloadFile.files[0] : null;
+        if (pendingDownload) {
+          removeDownload = false;
+        }
+        syncDownloadControls();
+      });
+    }
+    if (downloadRemove) {
+      downloadRemove.addEventListener("click", () => {
+        pendingDownload = null;
+        removeDownload = true;
+        if (downloadFile) {
+          downloadFile.value = "";
+        }
+        syncDownloadControls();
+      });
+    }
     const addSpec = document.querySelector("[data-spec-add]");
     if (addSpec) {
       addSpec.addEventListener("click", () => addSpecRow("", ""));
@@ -634,6 +769,12 @@
       const specifications = specRows();
       if (specifications.some((row) => !row.label || !row.value)) {
         setStatus(result, "Enter both a name and a value for each specification.");
+        return;
+      }
+      const downloadOn = form.download_enabled.checked;
+      const willHaveFile = Boolean(pendingDownload) || (downloadConfigured && !removeDownload);
+      if (downloadOn && !willHaveFile) {
+        setStatus(result, "Choose a file before enabling the download.");
         return;
       }
       const body = {
@@ -692,6 +833,14 @@
             return;
           }
           saved = await uploaded.json();
+        }
+        try {
+          saved = await applyDownload(saved);
+        } catch (error) {
+          setStatus(result, "The product was saved, but the download was not. " + error.message);
+          fillForm(saved);
+          loadProducts();
+          return;
         }
         clearPreview();
         fillForm(saved);

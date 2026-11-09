@@ -218,6 +218,12 @@
         stock.textContent = "Out of stock";
         item.append(stock);
       }
+      if (product.download_enabled === true) {
+        const download = document.createElement("p");
+        download.className = "catalogue-download";
+        download.textContent = "Download available";
+        item.append(download);
+      }
 
       if (typeof product.sku === "string" && product.sku.trim()) {
         const sku = document.createElement("p");

@@ -6,6 +6,7 @@
 User-agent: *
 Allow: /
 
+# Downloadable product files are not stored in this website directory.
 # The live hostname is not configured in this project.
 # After the public https origin is confirmed, add:
 # Sitemap: https://EXAMPLE/sitemap.xml

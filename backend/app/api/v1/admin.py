@@ -12,6 +12,13 @@ from app.db.session import get_session
 from app.models.admin import AdminUser
 from app.models.auth import AdminSession
 from app.models.product import Product
+from app.products.downloads import (
+    DownloadRejected,
+    download_directory,
+    max_download_bytes,
+    remove_download,
+    save_download,
+)
 from app.products.gallery import (
     GalleryError,
     add_image,
@@ -75,6 +82,11 @@ def _view(product: Product, session: Session) -> ManagedProduct:
         image_url=images[0].url if images else public_image_url(product.image_filename),
         images=images,
         specifications=specifications,
+        download_enabled=product.download_enabled,
+        download_configured=bool(product.download_stored_name),
+        download_original_name=product.download_original_name,
+        download_button_label=product.download_button_label or "Download Product File",
+        download_size_bytes=product.download_size_bytes,
         created_at=product.created_at,
         updated_at=product.updated_at,
     )
@@ -177,6 +189,104 @@ async def replace_product_image(
     if previous and previous != filename:
         remove_product_image(directory, previous)
     return _view(product, session)
+
+
+@router.post("/products/{product_id}/download", response_model=ManagedProduct)
+async def upload_product_download(
+    product_id: uuid.UUID,
+    download: UploadFile = File(...),
+    principal: tuple[AdminUser, AdminSession] = Depends(require_csrf),
+    session: Session = Depends(get_session),
+) -> ManagedProduct:
+    owner, _row = principal
+    settings = get_settings()
+    limit = max_download_bytes(settings)
+    data = await download.read(limit + 1)
+    await download.close()
+    directory = download_directory(settings)
+    stored_name = None
+    try:
+        product = _owned_product(session, product_id)
+        previous = product.download_stored_name
+        stored_name, content_type, size = save_download(
+            directory,
+            data,
+            download.filename or "",
+            limit,
+            download.content_type,
+        )
+        update_product(
+            session,
+            product_id,
+            {
+                "download_stored_name": stored_name,
+                "download_original_name": _safe_original_name(download.filename),
+                "download_content_type": content_type,
+                "download_size_bytes": size,
+            },
+            owner.email,
+        )
+    except HTTPException:
+        remove_download(directory, stored_name)
+        raise
+    except DownloadRejected as exc:
+        remove_download(directory, stored_name)
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except ProductNotFound as exc:
+        remove_download(directory, stored_name)
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ProductError as exc:
+        remove_download(directory, stored_name)
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except SQLAlchemyError:
+        remove_download(directory, stored_name)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    if previous and previous != stored_name:
+        remove_download(directory, previous)
+    return _view(product, session)
+
+
+@router.delete("/products/{product_id}/download", response_model=ManagedProduct)
+def delete_product_download(
+    product_id: uuid.UUID,
+    principal: tuple[AdminUser, AdminSession] = Depends(require_csrf),
+    session: Session = Depends(get_session),
+) -> ManagedProduct:
+    owner, _row = principal
+    directory = download_directory(get_settings())
+    previous = None
+    try:
+        product = _owned_product(session, product_id)
+        previous = product.download_stored_name
+        product = update_product(
+            session,
+            product_id,
+            {
+                "download_enabled": False,
+                "download_stored_name": None,
+                "download_original_name": None,
+                "download_content_type": None,
+                "download_size_bytes": None,
+            },
+            owner.email,
+        )
+    except HTTPException:
+        raise
+    except ProductNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    remove_download(directory, previous)
+    return _view(product, session)
+
+
+def _safe_original_name(upload_name: str | None) -> str:
+    from pathlib import Path
+
+    name = Path(upload_name or "").name.strip()
+    if not name or name in {".", ".."}:
+        return "download"
+    return name[:160]
 
 
 def _owned_product(session: Session, product_id: uuid.UUID) -> Product:

@@ -56,9 +56,9 @@ def test_legal_pages_are_drafts_with_placeholders() -> None:
 def test_footer_and_checkout_link_to_the_legal_pages() -> None:
     for name in ("index.html", "checkout.html", "cart.html", "products.html", "product.html"):
         page = _page(name)
-        assert 'href="terms.html"' in page
-        assert 'href="privacy.html"' in page
-        assert 'href="shipping-and-returns.html"' in page
+        assert 'href="terms.html"' in page or 'href="/terms.html"' in page
+        assert 'href="privacy.html"' in page or 'href="/privacy.html"' in page
+        assert 'href="shipping-and-returns.html"' in page or 'href="/shipping-and-returns.html"' in page
     checkout = _page("checkout.html")
     assert "I have read and agree to the" in checkout
     assert 'target="_blank"' in checkout
