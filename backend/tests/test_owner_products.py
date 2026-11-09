@@ -1,9 +1,11 @@
 """Owner product management. Fixture rows stay in the isolated database."""
 
 import base64
+import logging
 import uuid
 
 import pytest
+from sqlalchemy.exc import ProgrammingError
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
@@ -128,6 +130,24 @@ def test_product_management_requires_an_owner(monkeypatch, isolated_database_url
     assert client.patch(f"/api/v1/admin/products/{uuid.uuid4()}", json={"name": "Fixture"}).status_code == 401
     assert client.delete(f"/api/v1/admin/products/{uuid.uuid4()}").status_code == 401
     assert client.get("/api/v1/admin/readiness").status_code == 404
+
+
+def test_a_product_list_failure_is_logged_and_stays_generic(monkeypatch, isolated_database_url: str, caplog) -> None:
+    _use_database(monkeypatch, isolated_database_url)
+    _owner(isolated_database_url)
+    _login()
+
+    def fail(_session):
+        raise ProgrammingError("SELECT products.specification_enabled", {}, Exception("column products.specification_enabled does not exist"))
+
+    monkeypatch.setattr("app.api.v1.admin.list_products", fail)
+    with caplog.at_level(logging.ERROR, logger="app.api.v1.admin"):
+        response = client.get("/api/v1/admin/products")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Product management is temporarily unavailable."}
+    assert "specification_enabled" not in response.text
+    assert "column products.specification_enabled does not exist" in caplog.text
+    assert "reading the product list" in caplog.text
 
 
 def test_owner_can_save_several_products_and_the_catalogue_stays_selective(monkeypatch, isolated_database_url: str) -> None:

@@ -67,6 +67,12 @@ STORAGE_FAILED = "The specification sheet could not be stored on the server."
 DELETE_FAILED = "The product could not be deleted. Nothing was removed. Try again."
 
 
+def _database_unavailable(action: str) -> HTTPException:
+    """Log the database error and return the public 503. The response stays generic."""
+    logger.exception("Product management failed while %s", action)
+    return HTTPException(status_code=503, detail=UNAVAILABLE)
+
+
 def _sheet(product: Product) -> SpecificationSheet:
     configured = bool(product.specification_stored_name)
     available = configured and open_specification(specification_directory(get_settings()), product.specification_stored_name) is not None
@@ -119,7 +125,7 @@ def products(
     try:
         rows = list_products(session)
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("reading the product list") from None
     return ProductList(products=[_view(row, session) for row in rows])
 
 
@@ -141,7 +147,7 @@ def add_product(
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("creating a product") from None
     return _view(product, session)
 
 
@@ -172,7 +178,7 @@ def edit_product(
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("updating a product") from None
     return _view(product, session)
 
 
@@ -206,7 +212,7 @@ async def replace_product_image(
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except SQLAlchemyError:
         remove_product_image(directory, filename)
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("saving a product image") from None
     if previous and previous != filename:
         remove_product_image(directory, previous)
     return _view(product, session)
@@ -221,7 +227,7 @@ def product_specification(
     try:
         product = _owned_product(session, product_id)
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("reading a specification sheet") from None
     return _sheet(product)
 
 
@@ -234,7 +240,7 @@ def preview_product_specification(
     try:
         product = _owned_product(session, product_id)
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("opening a specification sheet") from None
     path = open_specification(specification_directory(get_settings()), product.specification_stored_name)
     if path is None:
         raise HTTPException(status_code=404, detail="No specification sheet is stored for this product.")
@@ -290,7 +296,7 @@ async def upload_product_specification(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
         remove_specification(directory, stored_name)
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("saving a specification sheet") from None
     except OSError:
         logger.exception("Specification sheet storage failed")
         remove_specification(directory, stored_name)
@@ -325,7 +331,7 @@ def delete_product_specification(
     except ProductNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("removing a specification sheet") from None
     try:
         remove_specification(directory, previous)
     except OSError:
@@ -361,7 +367,7 @@ async def add_product_image(
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("adding a gallery image") from None
     return _view(product, session)
 
 
@@ -387,7 +393,7 @@ async def replace_gallery_image(
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("replacing a gallery image") from None
     return _view(product, session)
 
 
@@ -408,7 +414,7 @@ def delete_gallery_image(
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("removing a gallery image") from None
     return _view(product, session)
 
 
@@ -428,7 +434,7 @@ def order_gallery_images(
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("reordering gallery images") from None
     return _view(product, session)
 
 
@@ -460,7 +466,7 @@ def product_audit(
     except ProductNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        raise _database_unavailable("reading the product audit") from None
     return ProductAuditList(
         events=[
             ProductAuditEventView(created_at=event.created_at, actor=event.actor, changes=event.changes)
