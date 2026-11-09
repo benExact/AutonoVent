@@ -11,7 +11,8 @@
   const endpoint = base.replace(/\/$/, "");
   const moneyInput = window.AutonoventMoney;
   let editingId = "";
-  let selectedFiles = [];
+  let pendingImages = [];
+  let savedImageCount = 0;
   let slugEdited = false;
   let saving = false;
   let deleting = false;
@@ -100,11 +101,50 @@
   }
 
   function clearPreview() {
-    selectedFiles = [];
+    pendingImages.forEach((item) => URL.revokeObjectURL(item.url));
+    pendingImages = [];
     const input = document.querySelector("#product-image");
     if (input) {
       input.value = "";
     }
+    renderPending();
+  }
+
+  function imageRoom() {
+    return Math.max(0, 4 - savedImageCount - pendingImages.length);
+  }
+
+  function renderPending() {
+    const host = document.querySelector("[data-product-pending]");
+    const count = document.querySelector("[data-product-image-count]");
+    if (count) {
+      const total = savedImageCount + pendingImages.length;
+      count.textContent = total + " of 4 images. The first saved image is the primary image. Use Remove on any image you do not want.";
+    }
+    if (!host) {
+      return;
+    }
+    host.replaceChildren();
+    pendingImages.forEach((item, index) => {
+      const card = document.createElement("figure");
+      card.className = "owner-gallery__item";
+      const picture = document.createElement("img");
+      picture.src = item.url;
+      picture.alt = "";
+      picture.width = 160;
+      picture.height = 120;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button button--secondary";
+      remove.textContent = "Remove image";
+      remove.addEventListener("click", () => {
+        URL.revokeObjectURL(item.url);
+        pendingImages.splice(index, 1);
+        renderPending();
+      });
+      card.append(picture, remove);
+      host.append(card);
+    });
   }
 
   function specRows() {
@@ -289,6 +329,7 @@
     if (specs) {
       specs.replaceChildren();
     }
+    savedImageCount = 0;
     const gallery = document.querySelector("[data-product-gallery]");
     if (gallery) {
       gallery.replaceChildren();
@@ -408,15 +449,13 @@
 
   function renderGallery(product) {
     const host = document.querySelector("[data-product-gallery]");
-    const count = document.querySelector("[data-product-image-count]");
     if (!host) {
       return;
     }
     host.replaceChildren();
     const images = Array.isArray(product.images) ? product.images : [];
-    if (count) {
-      count.textContent = images.length + " of 4 images. The first image is the primary image.";
-    }
+    savedImageCount = images.length;
+    renderPending();
     images.forEach((image, index) => {
       const card = document.createElement("figure");
       card.className = "owner-gallery__item";
@@ -458,7 +497,7 @@
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "button button--secondary";
-      remove.textContent = "Remove";
+      remove.textContent = "Remove image";
       remove.addEventListener("click", () => deleteImage(product, image.id));
       actions.append(replace, remove);
       card.append(picture, actions);
@@ -539,15 +578,28 @@
     }
     if (imageInput) {
       imageInput.addEventListener("change", () => {
-        selectedFiles = [...imageInput.files];
-        const problem = selectedFiles.map(chosenImage).find(Boolean);
+        const chosen = [...imageInput.files];
+        imageInput.value = "";
+        const problem = chosen.map(chosenImage).find(Boolean);
         if (problem) {
-          imageInput.value = "";
-          selectedFiles = [];
           setStatus(result, problem);
           return;
         }
-        setStatus(result, selectedFiles.length ? selectedFiles.length + " image" + (selectedFiles.length === 1 ? "" : "s") + " selected." : "");
+        const room = imageRoom();
+        if (!room) {
+          setStatus(result, "A product can have up to 4 images. Remove one before adding another.");
+          return;
+        }
+        const accepted = chosen.slice(0, room);
+        accepted.forEach((file) => {
+          pendingImages.push({ file: file, url: URL.createObjectURL(file) });
+        });
+        renderPending();
+        if (accepted.length < chosen.length) {
+          setStatus(result, "Only 4 images can be kept. Extra images were not added.");
+          return;
+        }
+        setStatus(result, "");
       });
     }
     form.name.addEventListener("input", () => {
@@ -574,7 +626,7 @@
         setStatus(result, error.message);
         return;
       }
-      const imageProblem = selectedFiles.map(chosenImage).find(Boolean);
+      const imageProblem = pendingImages.map((item) => chosenImage(item.file)).find(Boolean);
       if (imageProblem) {
         setStatus(result, imageProblem);
         return;
@@ -625,7 +677,7 @@
           return;
         }
         let saved = await response.json();
-        for (const pending of selectedFiles) {
+        for (const pending of pendingImages.map((item) => item.file)) {
           const data = new FormData();
           data.append("image", pending);
           const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/images", {
