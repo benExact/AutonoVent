@@ -16,12 +16,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models.audit import ProductAuditEvent
 from app.models.carousel import CarouselSlide
 from app.models.file_cleanup import FileCleanup
 from app.models.product import Product, ProductImage, ProductSlugAlias, ProductSpecification
 from app.products.images import image_directory, remove_empty_slug_directory, stored_image_path
-from app.products.service import ProductNotFound, get_product
+from app.products.service import ProductNotFound, get_product, record_product_deletion
 from app.products.specifications import specification_directory, stored_specification_path
 
 logger = logging.getLogger(__name__)
@@ -63,7 +62,7 @@ def delete_product_permanently(session: Session, product_id: uuid.UUID, roots: S
     sheet_names = {product.specification_stored_name} if product.specification_stored_name else set()
     folders = {slug} | {name.split("/", 1)[0] for name in image_names if "/" in name}
     try:
-        session.execute(delete(ProductAuditEvent).where(ProductAuditEvent.product_id == product.id))
+        record_product_deletion(session, product, actor)
         session.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
         session.execute(delete(ProductSpecification).where(ProductSpecification.product_id == product.id))
         session.execute(delete(ProductSlugAlias).where(ProductSlugAlias.product_id == product.id))

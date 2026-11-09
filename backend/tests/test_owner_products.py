@@ -3,6 +3,8 @@
 import base64
 import logging
 import uuid
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.exc import ProgrammingError
@@ -508,5 +510,137 @@ def test_permanently_deleting_a_product_keeps_order_history_and_blocks_purchase(
                 ),
             )
     engine.dispose()
+    reset_engine()
+    get_settings.cache_clear()
+
+
+def test_product_history_is_filtered_paged_and_kept_after_deletion(monkeypatch, isolated_database_url: str, tmp_path) -> None:
+    _use_database(monkeypatch, isolated_database_url, str(tmp_path))
+    monkeypatch.setenv("PRODUCT_SPECIFICATION_DIR", str(tmp_path / "sheets"))
+    get_settings.cache_clear()
+    _owner(isolated_database_url)
+    assert client.post("/api/v1/admin/products", json=PRODUCT).status_code == 401
+    assert client.get("/api/v1/admin/audit").status_code == 401
+    _login()
+    saved = _create(PRODUCT)
+    assert saved.status_code == 201
+    product_id = uuid.UUID(saved.json()["id"])
+    other = _create(dict(PRODUCT, name="Other history", slug="other-history", sku="FIX-2"))
+    assert other.status_code == 201
+    zone = ZoneInfo("Africa/Johannesburg")
+    now = datetime.now(zone)
+    engine = create_engine(isolated_database_url)
+    with Session(engine) as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        session.add(
+            ProductAuditEvent(
+                product_id=product.id,
+                product_name=product.name,
+                actor=EMAIL,
+                changes=[{"field": "currency", "previous": "OLD", "new": "MARK"}],
+                created_at=now - timedelta(days=40),
+            )
+        )
+        late = now.replace(hour=23, minute=30, second=0, microsecond=0)
+        session.add(
+            ProductAuditEvent(
+                product_id=product.id,
+                product_name=product.name,
+                actor=EMAIL,
+                changes=[{"field": "currency", "previous": None, "new": "LATE"}],
+                created_at=late,
+            )
+        )
+        session.add(
+            ProductAuditEvent(
+                product_id=product.id,
+                product_name=product.name,
+                actor="other-owner@example.com",
+                changes=[{"field": "sku", "previous": "FIX-1", "new": "OTHER"}],
+                created_at=now,
+            )
+        )
+        for index in range(30):
+            session.add(
+                ProductAuditEvent(
+                    product_id=product.id,
+                    product_name=product.name,
+                    actor=EMAIL,
+                    changes=[{"field": "sku", "previous": str(index), "new": f"page-{index}"}],
+                    created_at=now - timedelta(minutes=index),
+                )
+            )
+        session.commit()
+    engine.dispose()
+
+    recent = client.get("/api/v1/admin/audit")
+    assert recent.status_code == 200
+    body = recent.json()
+    assert body["page_size"] == 25
+    assert body["page"] == 1
+    assert len(body["records"]) == 25
+    assert body["total"] > 25
+    assert body["total_pages"] == (body["total"] + 24) // 25
+    assert all(record["new"] != "MARK" for record in body["records"])
+
+    older = client.get(
+        "/api/v1/admin/audit",
+        params={
+            "start_date": (now - timedelta(days=40)).date().isoformat(),
+            "end_date": now.date().isoformat(),
+            "field": "currency",
+        },
+    )
+    assert older.status_code == 200
+    assert {record["new"] for record in older.json()["records"]} >= {"MARK", "LATE"}
+
+    same_day = client.get(
+        "/api/v1/admin/audit",
+        params={"start_date": late.date().isoformat(), "end_date": late.date().isoformat(), "field": "currency"},
+    )
+    assert same_day.status_code == 200
+    assert "LATE" in {record["new"] for record in same_day.json()["records"]}
+
+    invalid = client.get("/api/v1/admin/audit", params={"start_date": "2026-11-10", "end_date": "2026-11-01"})
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"] == "The start date cannot be later than the end date."
+    missing = client.get("/api/v1/admin/audit", params={"start_date": "2026-11-01"})
+    assert missing.status_code == 422
+
+    named = client.get("/api/v1/admin/audit", params={"product": "Other history", "field": "name"})
+    assert named.status_code == 200
+    assert named.json()["total"] >= 1
+    assert {record["product_name"] for record in named.json()["records"]} == {"Other history"}
+
+    actor = client.get("/api/v1/admin/audit", params={"changed_by": "other-owner", "product": "Fixture", "field": "sku"})
+    assert actor.status_code == 200
+    actor_body = actor.json()
+    assert actor_body["total"] == 1
+    assert actor_body["records"][0]["actor"] == "other-owner@example.com"
+    assert actor_body["records"][0]["new"] == "OTHER"
+
+    paged = client.get("/api/v1/admin/audit", params={"field": "sku", "product": "Fixture", "limit": 25, "offset": 0})
+    assert paged.status_code == 200
+    first = paged.json()
+    assert len(first["records"]) == 25
+    assert first["total"] > 25
+    second = client.get("/api/v1/admin/audit", params={"field": "sku", "product": "Fixture", "limit": 25, "offset": 25})
+    assert second.status_code == 200
+    assert len(second.json()["records"]) == first["total"] - 25
+    assert {record["id"] for record in first["records"]}.isdisjoint({record["id"] for record in second.json()["records"]})
+
+    removed = client.delete(f"/api/v1/admin/products/{product_id}", headers={"X-CSRF-Token": _cookie("autonovent_csrf")})
+    assert removed.status_code == 204
+    kept = client.get("/api/v1/admin/audit", params={"product": "Fixture product", "field": "deleted"})
+    assert kept.status_code == 200
+    deleted = kept.json()["records"]
+    assert len(deleted) == 1
+    assert deleted[0]["product_id"] is None
+    assert deleted[0]["product_name"] == "Fixture product"
+    assert deleted[0]["new"] == "Permanently deleted"
+    still = client.get("/api/v1/admin/audit", params={"product": "Fixture product", "field": "sku", "limit": 25})
+    assert still.status_code == 200
+    assert still.json()["total"] > 25
     reset_engine()
     get_settings.cache_clear()

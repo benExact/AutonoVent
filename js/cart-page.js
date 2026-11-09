@@ -34,6 +34,14 @@
     return imageFallback;
   }
 
+  function productPath(product) {
+    const slug = product && typeof product.slug === "string" ? product.slug.trim().toLowerCase() : "";
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return "";
+    }
+    return "/product/" + encodeURIComponent(slug);
+  }
+
   function productThumbnail(product) {
     const image = document.createElement("img");
     image.className = "cart-thumb";
@@ -41,14 +49,23 @@
     image.height = 72;
     image.decoding = "async";
     const source = productImageSource(product);
-    image.alt = source === imageFallback || !product ? "" : product.name;
+    const path = productPath(product);
+    image.alt = path || source === imageFallback || !product ? "" : product.name;
     image.src = source;
     image.addEventListener("error", function onError() {
       image.removeEventListener("error", onError);
       image.src = imageFallback;
       image.alt = "";
     });
-    return image;
+    if (!path) {
+      return image;
+    }
+    const link = document.createElement("a");
+    link.className = "cart-thumb-link";
+    link.href = path;
+    link.setAttribute("aria-label", "View " + product.name);
+    link.append(image);
+    return link;
   }
 
   function render() {

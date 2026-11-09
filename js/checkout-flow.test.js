@@ -349,8 +349,11 @@ test("owner change history is rendered as a table", () => {
   const orders = fs.readFileSync(path.join(__dirname, "owner-portal.js"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");
   const page = fs.readFileSync(path.join(__dirname, "..", "owner", "products.html"), "utf8");
-  assert.match(page, /product-audit\.js/);
-  assert.match(products, /OmniprodProductAudit\.render/);
+  const history = fs.readFileSync(path.join(__dirname, "..", "owner", "history.html"), "utf8");
+  assert.doesNotMatch(page, /data-product-audit|product-audit\.js/);
+  assert.match(history, /product-audit\.js/);
+  assert.match(history, /aria-current="page">History/);
+  assert.match(fs.readFileSync(path.join(__dirname, "owner-history.js"), "utf8"), /renderHistory/);
   assert.match(orders, /historyTable\("Status history", \["When", "What", "From", "To", "Who"\]/);
   assert.match(orders, /className = "history-table"/);
   assert.match(css, /\.audit-table th/);
@@ -365,6 +368,9 @@ test("cart items show the catalogue image beside the existing controls", () => {
   assert.match(page, /\/media\/products\//);
   assert.match(page, /product-placeholder\.svg/);
   assert.match(page, /cart-thumb/);
+  assert.match(page, /\/product\/" \+ encodeURIComponent\(slug\)/);
+  assert.match(page, /aria-label", "View " \+ product\.name/);
+  assert.match(page, /\^\[a-z0-9\]\+\(\?:-\[a-z0-9\]\+\)\*\$/);
   assert.match(page, /Line total /);
   assert.match(page, /cart-subtotal/);
   assert.match(page, /textContent = "Subtotal"/);

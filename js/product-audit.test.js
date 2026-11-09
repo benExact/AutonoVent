@@ -22,8 +22,9 @@ test("product audit labels, prices, and empty values stay readable", () => {
 
 test("product audit dates and images do not expose a filesystem path", () => {
   const when = audit.formatWhen("2026-11-09T16:40:00.000Z");
-  assert.match(when.date, /^\d{2} \w{3} 2026$/);
-  assert.match(when.time, /^\d{2}:\d{2}$/);
+  assert.equal(when.date, "09 Nov 2026");
+  assert.equal(when.time, "18:40");
+  assert.equal(audit.fieldLabel("deleted"), "Product");
   assert.equal(audit.imageUrl("http://127.0.0.1:8001", "../secret.jpg"), "");
   assert.equal(audit.imageUrl("http://127.0.0.1:8001", "C:\\var\\omniprod\\photo.jpg"), "");
   assert.equal(

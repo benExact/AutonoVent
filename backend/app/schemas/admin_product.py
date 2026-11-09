@@ -262,3 +262,22 @@ class ProductAuditEventView(BaseModel):
 
 class ProductAuditList(BaseModel):
     events: list[ProductAuditEventView]
+
+
+class AuditHistoryRecord(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    product_id: uuid.UUID | None
+    product_name: str
+    actor: str
+    field: str
+    previous: str | int | bool | None
+    new: str | int | bool | None
+
+
+class AuditHistoryPage(BaseModel):
+    records: list[AuditHistoryRecord]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

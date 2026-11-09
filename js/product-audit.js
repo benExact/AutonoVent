@@ -22,8 +22,8 @@
     specification_enabled: "Specification Sheet Enabled",
     specification_stored_name: "Specification Sheet File",
     specification_original_name: "Specification Sheet Name",
+    deleted: "Product",
   };
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const imageName = /^[0-9a-f]{32}\.(jpg|png|webp)$/;
   const galleryName = /^[a-z0-9]+(?:-[a-z0-9]+)*\/[0-9a-f]{16}(?:-thumb)?\.webp$/;
   const previewLimit = 140;
@@ -41,10 +41,20 @@
     if (Number.isNaN(date.getTime())) {
       return { date: "Not recorded", time: "" };
     }
-    const day = String(date.getDate()).padStart(2, "0");
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    return { date: day + " " + months[date.getMonth()] + " " + date.getFullYear(), time: hours + ":" + minutes };
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Johannesburg",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(date);
+    const part = function (type) {
+      const found = parts.find(function (item) { return item.type === type; });
+      return found ? found.value : "";
+    };
+    return { date: part("day") + " " + part("month") + " " + part("year"), time: part("hour") + ":" + part("minute") };
   }
 
   function formatPrice(cents) {
@@ -267,6 +277,103 @@
     return block;
   }
 
+  function renderHistory(host, payload, options) {
+    const settings = options || {};
+    const records = payload && Array.isArray(payload.records) ? payload.records : [];
+    host.replaceChildren();
+    if (!records.length) {
+      host.textContent = "No changes in this date range.";
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "audit-table-wrap";
+    const table = document.createElement("table");
+    table.className = "audit-table";
+    const caption = document.createElement("caption");
+    caption.className = "visually-hidden";
+    caption.textContent = "Product change history";
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["Date & Time", "Product", "Changed By", "Field Changed", "Previous Value", "New Value"].forEach(function (text) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = text;
+      headRow.append(cell);
+    });
+    head.append(headRow);
+    table.append(caption, head);
+    let body = null;
+    let previousId = "";
+    let group = 0;
+    records.forEach(function (record) {
+      const id = String(record.id || "");
+      const first = id !== previousId;
+      if (first) {
+        body = document.createElement("tbody");
+        body.className = "audit-group" + (group % 2 ? " audit-group--shade" : "");
+        group += 1;
+        previousId = id;
+        table.append(body);
+      }
+      const when = formatWhen(record.created_at);
+      const row = document.createElement("tr");
+      if (!first) {
+        row.className = "audit-continued";
+      }
+      const actor = typeof record.actor === "string" && record.actor.trim() ? record.actor.trim() : "Not recorded";
+      const product = typeof record.product_name === "string" && record.product_name.trim() ? record.product_name.trim() : "Deleted product";
+      row.append(
+        whenCell(when, first),
+        textCell("Product", first ? product : "", "audit-product"),
+        textCell("Changed By", first ? actor : "", "audit-actor"),
+        textCell("Field Changed", fieldLabel(record.field), "audit-field"),
+        valueCell("Previous Value", record.field, record.previous, "previous", settings.endpoint),
+        valueCell("New Value", record.field, record.new, "new", settings.endpoint)
+      );
+      body.append(row);
+    });
+    wrap.append(table);
+    host.append(wrap);
+    const pages = Number(payload.total_pages) || 0;
+    if (pages > 1) {
+      host.append(historyPager(Number(payload.page) || 1, pages, Number(payload.total) || records.length, settings.onPage));
+    } else {
+      const note = document.createElement("p");
+      note.className = "audit-pager";
+      note.textContent = (Number(payload.total) || records.length) + " records";
+      host.append(note);
+    }
+  }
+
+  function historyPager(page, pages, total, onPage) {
+    const bar = document.createElement("div");
+    bar.className = "audit-pager";
+    const previous = document.createElement("button");
+    previous.type = "button";
+    previous.className = "button button--secondary";
+    previous.textContent = "Previous";
+    previous.disabled = page <= 1;
+    previous.addEventListener("click", function () {
+      if (typeof onPage === "function") {
+        onPage(page - 1);
+      }
+    });
+    const status = document.createElement("p");
+    status.textContent = "Page " + page + " of " + pages + " · " + total + " records";
+    const next = document.createElement("button");
+    next.type = "button";
+    next.className = "button button--secondary";
+    next.textContent = "Next";
+    next.disabled = page >= pages;
+    next.addEventListener("click", function () {
+      if (typeof onPage === "function") {
+        onPage(page + 1);
+      }
+    });
+    bar.append(previous, status, next);
+    return bar;
+  }
+
   function pager(page, pages, onPage) {
     const bar = document.createElement("div");
     bar.className = "audit-pager";
@@ -303,5 +410,7 @@
     imageUrl: imageUrl,
     newestFirst: newestFirst,
     render: render,
+    renderHistory: renderHistory,
+    fields: labels,
   };
 });

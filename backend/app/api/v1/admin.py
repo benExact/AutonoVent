@@ -2,8 +2,9 @@
 
 import logging
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -45,6 +46,7 @@ from app.products.service import (
     get_product,
     list_audit_events,
     list_products,
+    search_audit_history,
     update_product,
 )
 from app.schemas.admin_product import (
@@ -52,6 +54,7 @@ from app.schemas.admin_product import (
     ManagedImage,
     ManagedProduct,
     ManagedSpecification,
+    AuditHistoryPage,
     ProductAuditEventView,
     ProductAuditList,
     ProductList,
@@ -453,6 +456,36 @@ def remove_product(
         logger.exception("Product %s could not be deleted. The transaction was rolled back.", product_id)
         raise HTTPException(status_code=503, detail=DELETE_FAILED) from None
     return Response(status_code=204)
+
+
+@router.get("/audit", response_model=AuditHistoryPage)
+def audit_history(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    product: str = "",
+    changed_by: str = "",
+    field: str = "",
+    limit: int = Query(default=25),
+    offset: int = Query(default=0),
+    _principal: tuple[AdminUser, AdminSession] = Depends(require_owner),
+    session: Session = Depends(get_session),
+) -> AuditHistoryPage:
+    try:
+        page = search_audit_history(
+            session,
+            start=start_date,
+            end=end_date,
+            product=product,
+            changed_by=changed_by,
+            field=field,
+            limit=limit,
+            offset=offset,
+        )
+    except ProductError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except SQLAlchemyError:
+        raise _database_unavailable("reading the product history") from None
+    return AuditHistoryPage.model_validate(page)
 
 
 @router.get("/products/{product_id}/audit", response_model=ProductAuditList)

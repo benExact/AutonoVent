@@ -1,8 +1,11 @@
 """Owner product records. Prices are saved only when the owner supplies them."""
 
+import math
 import uuid
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -29,6 +32,9 @@ AUDITED_FIELDS = (
     "specification_original_name",
 )
 SPECIFICATION_REQUIRED = "Upload a PDF specification sheet before publishing with the download enabled."
+HISTORY_ZONE = ZoneInfo("Africa/Johannesburg")
+HISTORY_PAGE_SIZES = (25, 50, 100)
+HISTORY_FIELDS = set(AUDITED_FIELDS) | {"deleted"}
 
 
 class ProductError(Exception):
@@ -69,7 +75,13 @@ def create_product(session: Session, fields: dict[str, object], actor: str) -> P
         product = Product(**fields)
         session.add(product)
         session.flush()
-        _record(session, product.id, actor, _changes({field: None for field in AUDITED_FIELDS}, fields, include_unchanged=True))
+        _record(
+            session,
+            product.id,
+            product.name,
+            actor,
+            _changes({field: None for field in AUDITED_FIELDS}, fields, include_unchanged=True),
+        )
         session.commit()
     except IntegrityError:
         session.rollback()
@@ -114,7 +126,8 @@ def update_product(
     for key, value in fields.items():
         setattr(product, key, value)
     if changes:
-        _record(session, product.id, actor, changes)
+        recorded_name = fields.get("name", previous.get("name"))
+        _record(session, product.id, str(recorded_name or product.name), actor, changes)
     try:
         session.commit()
     except IntegrityError:
@@ -149,10 +162,131 @@ def _changes(previous: dict[str, object], fields: dict[str, object], *, include_
     return changes
 
 
-def _record(session: Session, product_id: uuid.UUID, actor: str, changes: list[dict[str, object]]) -> None:
+def record_product_deletion(session: Session, product: Product, actor: str) -> None:
+    _record(
+        session,
+        product.id,
+        product.name,
+        actor,
+        [{"field": "deleted", "previous": None, "new": "Permanently deleted"}],
+    )
+
+
+def search_audit_history(
+    session: Session,
+    *,
+    start: date | None,
+    end: date | None,
+    product: str,
+    changed_by: str,
+    field: str,
+    limit: int,
+    offset: int,
+) -> dict[str, object]:
+    if limit not in HISTORY_PAGE_SIZES:
+        raise ProductError("Choose 25, 50, or 100 records per page.")
+    if offset < 0:
+        raise ProductError("The page is not valid.")
+    if len(product) > 160 or len(changed_by) > 254:
+        raise ProductError("The filter is too long.")
+    if field and field not in HISTORY_FIELDS:
+        raise ProductError("That field is not part of the product history.")
+    start_at, end_at = _history_window(start, end)
+    filters = """
+        event.created_at >= :start_at
+        AND event.created_at < :end_at
+        AND (:product = '' OR event.product_name ILIKE :product ESCAPE '\\')
+        AND (:actor = '' OR event.actor ILIKE :actor ESCAPE '\\')
+        AND (:field = '' OR change.value->>'field' = :field)
+    """
+    params = {
+        "start_at": start_at,
+        "end_at": end_at,
+        "product": _contains(product),
+        "actor": _contains(changed_by),
+        "field": field,
+        "limit": limit,
+        "offset": offset,
+    }
+    total = session.scalar(
+        text(
+            f"""
+            SELECT count(*)
+            FROM product_audit_events AS event
+            CROSS JOIN LATERAL jsonb_array_elements(event.changes) WITH ORDINALITY AS change(value, ordinality)
+            WHERE {filters}
+            """
+        ),
+        params,
+    )
+    total = int(total or 0)
+    rows = session.execute(
+        text(
+            f"""
+            SELECT event.id, event.created_at, event.product_id, event.product_name, event.actor, change.value AS change
+            FROM product_audit_events AS event
+            CROSS JOIN LATERAL jsonb_array_elements(event.changes) WITH ORDINALITY AS change(value, ordinality)
+            WHERE {filters}
+            ORDER BY event.created_at DESC, event.id DESC, change.ordinality ASC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        params,
+    ).mappings()
+    records = []
+    for row in rows:
+        change = row["change"] if isinstance(row["change"], dict) else {}
+        records.append(
+            {
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "product_id": row["product_id"],
+                "product_name": row["product_name"],
+                "actor": row["actor"],
+                "field": str(change.get("field") or ""),
+                "previous": change.get("previous"),
+                "new": change.get("new"),
+            }
+        )
+    pages = math.ceil(total / limit) if total else 0
+    return {
+        "records": records,
+        "total": total,
+        "page": (offset // limit) + 1,
+        "page_size": limit,
+        "total_pages": pages,
+    }
+
+
+def _history_window(start: date | None, end: date | None) -> tuple[datetime, datetime]:
+    today = datetime.now(HISTORY_ZONE).date()
+    if start is None and end is None:
+        end = today
+        start = today - timedelta(days=29)
+    if start is None or end is None:
+        raise ProductError("Choose both a start date and an end date.")
+    if start > end:
+        raise ProductError("The start date cannot be later than the end date.")
+    start_at = datetime.combine(start, time.min, tzinfo=HISTORY_ZONE)
+    end_at = datetime.combine(end + timedelta(days=1), time.min, tzinfo=HISTORY_ZONE)
+    return start_at, end_at
+
+
+def _contains(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+    escaped = cleaned.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _record(session: Session, product_id: uuid.UUID, product_name: str, actor: str, changes: list[dict[str, object]]) -> None:
     cleaned = actor.strip()
     if not cleaned or len(cleaned) > 254:
         raise ProductError("A product change needs an owner.")
+    name = product_name.strip()
+    if not name:
+        raise ProductError("A product change needs a product name.")
     if not changes:
         return
-    session.add(ProductAuditEvent(product_id=product_id, actor=cleaned, changes=changes))
+    session.add(ProductAuditEvent(product_id=product_id, product_name=name[:160], actor=cleaned, changes=changes))

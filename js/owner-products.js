@@ -750,37 +750,6 @@
     }
     setStatus(document.querySelector("[data-product-save]"), "");
     showPanel();
-    loadAudit(product.id);
-  }
-
-  function loadAudit(productId) {
-    const host = document.querySelector("[data-product-audit]");
-    if (!host || !window.OmniprodProductAudit) {
-      return;
-    }
-    let page = 0;
-    host.replaceChildren();
-    api("/api/v1/admin/products/" + encodeURIComponent(productId) + "/audit").then(async (response) => {
-      if (!response.ok) {
-        host.textContent = "Change history could not be loaded.";
-        return;
-      }
-      const events = (await response.json()).events;
-      const show = function () {
-        window.OmniprodProductAudit.render(host, events, {
-          endpoint: endpoint,
-          page: page,
-          pageSize: 8,
-          onPage: function (next) {
-            page = next;
-            show();
-          },
-        });
-      };
-      show();
-    }).catch(() => {
-      host.textContent = "Change history could not be loaded.";
-    });
   }
 
   function clearForm() {
@@ -806,10 +775,6 @@
     resetGallery(null);
     renderSheet(null);
     setStatus(document.querySelector("[data-product-save]"), "");
-    const history = document.querySelector("[data-product-audit]");
-    if (history) {
-      history.replaceChildren();
-    }
     panel.hidden = true;
   }
 
