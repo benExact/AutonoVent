@@ -342,6 +342,19 @@ test("the owner gallery has one multi-image upload and a specification sheet sec
   assert.match(script, /\/images\/order/);
 });
 
+test("owner change history is rendered as a table", () => {
+  const products = fs.readFileSync(path.join(__dirname, "owner-products.js"), "utf8");
+  const orders = fs.readFileSync(path.join(__dirname, "owner-portal.js"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");
+  assert.match(products, /historyTable\("Change history", \["When", "Who", "Field", "From", "To"\]/);
+  assert.match(orders, /historyTable\("Status history", \["When", "What", "From", "To", "Who"\]/);
+  assert.match(products, /className = "history-table"/);
+  assert.match(orders, /className = "history-table"/);
+  assert.match(css, /\.history-table th/);
+  assert.doesNotMatch(products, /owner-history/);
+  assert.doesNotMatch(orders, /owner-history/);
+});
+
 test("cart items show the catalogue image beside the existing controls", () => {
   const page = fs.readFileSync(path.join(__dirname, "cart-page.js"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");

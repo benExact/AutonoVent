@@ -368,7 +368,7 @@ Other public pages, if you want them:
 
 ## 6. Owner account setup
 
-There is no public registration page. The first owner is created once, from `C:\Projects\AutonoVent\backend`, while PostgreSQL is running:
+There is no public registration page. An owner is created from `C:\Projects\AutonoVent\backend`, while PostgreSQL is running. Run the same command later with a different email to add another owner:
 
 ```powershell
 cd C:\Projects\AutonoVent\backend
@@ -387,7 +387,7 @@ The password must be 12 to 200 characters. The confirmation must match. Nothing 
 
 The command refuses to run when:
 
-- Any owner row already exists. It prints `An owner account already exists.` Sign in with that account. This command cannot add a second owner.
+- That email is already an owner. It prints `An owner with that email already exists.` Use a different email to add another owner.
 - `DATABASE_URL` does not point at `127.0.0.1` or `localhost`.
 - The API database is not running.
 
@@ -759,7 +759,7 @@ A wrong email or password returns the same message: `The email or password is no
 | Message | What to do |
 | --- | --- |
 | `This command does not accept arguments.` | Run it with no email and no password on the command line. |
-| `An owner account already exists.` | Use the existing owner. Do not create another with this command. |
+| `An owner with that email already exists.` | Choose a different email. The same command can add another owner. |
 | `Refusing to create an owner outside the local database.` | Point `DATABASE_URL` at `127.0.0.1` or `localhost`. |
 | `The passwords do not match.` | Type the same password twice. |
 | `The password must be 12 to 200 characters.` | Choose a longer password and type it at the prompt. |

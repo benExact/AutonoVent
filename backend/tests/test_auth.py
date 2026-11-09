@@ -220,18 +220,22 @@ def test_secure_cookie_in_production(monkeypatch, isolated_database_url: str) ->
     get_settings.cache_clear()
 
 
-def test_provisioning_refuses_a_second_owner(monkeypatch, isolated_database_url: str) -> None:
+def test_provisioning_adds_another_owner_and_refuses_a_duplicate_email(monkeypatch, isolated_database_url: str) -> None:
     _use_database(monkeypatch, isolated_database_url)
     monkeypatch.setattr(sys, "argv", ["bootstrap"])
-    answers = iter([EMAIL, EMAIL])
-    passwords = iter([PASSWORD, PASSWORD, PASSWORD, PASSWORD])
+    answers = iter([EMAIL, "other-fixture@example.com", EMAIL])
+    passwords = iter([PASSWORD, PASSWORD, PASSWORD, PASSWORD, PASSWORD, PASSWORD])
+    assert main(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 0
     assert main(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 0
     assert main(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 1
     engine = create_engine(isolated_database_url)
     with Session(engine) as session:
+        emails = set(session.scalars(select(AdminUser.email)))
+    with Session(engine) as session:
         with pytest.raises(OwnerExistsError):
-            create_initial_owner(session, "other-fixture@example.com", PASSWORD)
+            create_initial_owner(session, EMAIL, PASSWORD)
     engine.dispose()
+    assert emails == {EMAIL, "other-fixture@example.com"}
     monkeypatch.setattr(sys, "argv", ["bootstrap", "--password", PASSWORD])
     assert main() == 2
 
@@ -270,22 +274,22 @@ def test_production_provision_refuses_arguments(monkeypatch, isolated_database_u
     assert provision_production() == 2
 
 
-def test_production_provision_creates_one_owner(monkeypatch, isolated_database_url: str) -> None:
+def test_production_provision_adds_another_owner(monkeypatch, isolated_database_url: str) -> None:
     _use_database(monkeypatch, isolated_database_url)
     _production_env(monkeypatch)
     monkeypatch.setattr(sys, "argv", ["provision_production"])
-    answers = iter([EMAIL, "second-fixture@example.com"])
-    passwords = iter([PASSWORD, PASSWORD, PASSWORD, PASSWORD])
+    answers = iter([EMAIL, "second-fixture@example.com", EMAIL])
+    passwords = iter([PASSWORD, PASSWORD, PASSWORD, PASSWORD, PASSWORD, PASSWORD])
+    assert provision_production(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 0
     assert provision_production(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 0
     assert provision_production(read_email=lambda _prompt: next(answers), read_password=lambda _prompt: next(passwords)) == 1
     engine = create_engine(isolated_database_url)
     with Session(engine) as session:
-        owners = session.scalars(select(AdminUser)).all()
+        owners = session.scalars(select(AdminUser).order_by(AdminUser.email)).all()
     engine.dispose()
-    assert len(owners) == 1
-    assert owners[0].email == EMAIL
-    assert owners[0].role == "owner"
-    assert PASSWORD not in owners[0].password_hash
+    assert [owner.email for owner in owners] == [EMAIL, "second-fixture@example.com"]
+    assert {owner.role for owner in owners} == {"owner"}
+    assert all(PASSWORD not in owner.password_hash for owner in owners)
 
 
 def test_production_provision_hides_database_errors(monkeypatch, isolated_database_url: str, capsys) -> None:

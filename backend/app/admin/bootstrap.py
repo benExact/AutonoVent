@@ -1,4 +1,4 @@
-"""Create the first owner. Run from backend: python -m app.admin.bootstrap"""
+"""Create an owner. Run from backend: python -m app.admin.bootstrap"""
 
 import sys
 from getpass import getpass
@@ -29,8 +29,8 @@ def main(read_email=input, read_password=getpass) -> int:
     with Session(get_engine(), expire_on_commit=False) as session:
         try:
             create_initial_owner(session, email, password)
-        except OwnerExistsError:
-            print("An owner account already exists.", file=sys.stderr)
+        except OwnerExistsError as exc:
+            print(str(exc), file=sys.stderr)
             return 1
         except OwnerProvisioningError as exc:
             print(str(exc), file=sys.stderr)

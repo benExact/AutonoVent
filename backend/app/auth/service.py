@@ -1,8 +1,9 @@
-"""Owner sessions, login limits, and the one-off owner account."""
+"""Owner sessions, login limits, and owner accounts."""
 
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.passwords import hash_password, verify_missing_owner, verify_password
@@ -18,7 +19,7 @@ AUTH_REQUIRED = "Authentication is required."
 
 
 class OwnerExistsError(Exception):
-    """An owner account is already stored."""
+    """An owner with this email is already stored."""
 
 
 class OwnerProvisioningError(Exception):
@@ -29,14 +30,17 @@ def create_initial_owner(session: Session, email: str, password: str) -> AdminUs
     normalized = _email(email)
     if len(password) < 12 or len(password) > 200:
         raise OwnerProvisioningError("The password must be 12 to 200 characters.")
-    with session.begin():
-        existing = session.scalar(select(func.count()).select_from(AdminUser))
-        if existing:
-            raise OwnerExistsError("An owner account already exists.")
-        owner = AdminUser(email=normalized, password_hash=hash_password(password), role="owner")
-        session.add(owner)
-        session.flush()
-        owner_id = owner.id
+    try:
+        with session.begin():
+            taken = session.scalar(select(AdminUser.id).where(AdminUser.email == normalized))
+            if taken is not None:
+                raise OwnerExistsError("An owner with that email already exists.")
+            owner = AdminUser(email=normalized, password_hash=hash_password(password), role="owner")
+            session.add(owner)
+            session.flush()
+            owner_id = owner.id
+    except IntegrityError:
+        raise OwnerExistsError("An owner with that email already exists.") from None
     stored = session.get(AdminUser, owner_id)
     if stored is None:
         raise OwnerProvisioningError("The owner account could not be read after it was saved.")

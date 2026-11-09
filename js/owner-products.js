@@ -753,6 +753,72 @@
     loadAudit(product.id);
   }
 
+  const auditFields = {
+    name: "Name",
+    slug: "Slug",
+    description: "Description",
+    short_description: "Short description",
+    sku: "SKU",
+    unit_price_cents: "Price",
+    currency: "Currency",
+    active: "Published",
+    in_stock: "In stock",
+    archived_at: "Archived",
+    image_filename: "Image",
+    specification_enabled: "Specification sheet",
+    specification_original_name: "Specification file",
+  };
+
+  function auditField(field) {
+    return auditFields[field] || String(field || "—");
+  }
+
+  function auditValue(field, value) {
+    if (value === null || value === undefined || value === "") {
+      return "—";
+    }
+    if (typeof value === "boolean") {
+      return value ? "Yes" : "No";
+    }
+    if (field === "unit_price_cents" && Number.isInteger(value) && window.AutonoventMoney) {
+      const rands = window.AutonoventMoney.randsFromCents(value);
+      return rands ? "R" + rands : "—";
+    }
+    return String(value);
+  }
+
+  function historyTable(caption, headers, rows) {
+    const wrap = document.createElement("div");
+    wrap.className = "history-table-wrap";
+    const table = document.createElement("table");
+    table.className = "history-table";
+    const title = document.createElement("caption");
+    title.className = "visually-hidden";
+    title.textContent = caption;
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headers.forEach((text) => {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = text;
+      headRow.append(cell);
+    });
+    head.append(headRow);
+    const body = document.createElement("tbody");
+    rows.forEach((cells) => {
+      const row = document.createElement("tr");
+      cells.forEach((text) => {
+        const cell = document.createElement("td");
+        cell.textContent = text;
+        row.append(cell);
+      });
+      body.append(row);
+    });
+    table.append(title, head, body);
+    wrap.append(table);
+    return wrap;
+  }
+
   function loadAudit(productId) {
     const host = document.querySelector("[data-product-audit]");
     if (!host) {
@@ -769,21 +835,22 @@
         host.textContent = "No changes have been recorded.";
         return;
       }
-      const list = document.createElement("ol");
-      list.className = "owner-history";
+      const rows = [];
       events.forEach((event) => {
-        const item = document.createElement("li");
         const when = new Date(event.created_at);
         const stamp = Number.isNaN(when.getTime()) ? "Not recorded" : new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeStyle: "short" }).format(when);
-        const parts = event.changes.map((change) => {
-          const previous = change.previous === null || change.previous === undefined ? "empty" : String(change.previous);
-          const next = change.new === null || change.new === undefined ? "empty" : String(change.new);
-          return change.field + ": " + previous + " to " + next;
+        const changes = Array.isArray(event.changes) && event.changes.length ? event.changes : [null];
+        changes.forEach((change) => {
+          rows.push([
+            stamp,
+            event.actor || "Not recorded",
+            change ? auditField(change.field) : "—",
+            change ? auditValue(change.field, change.previous) : "—",
+            change ? auditValue(change.field, change.new) : "—",
+          ]);
         });
-        item.textContent = stamp + " — " + event.actor + " — " + parts.join("; ");
-        list.append(item);
       });
-      host.append(list);
+      host.append(historyTable("Change history", ["When", "Who", "Field", "From", "To"], rows));
     }).catch(() => {
       host.textContent = "Change history could not be loaded.";
     });

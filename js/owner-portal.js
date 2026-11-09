@@ -61,6 +61,38 @@
     return typeof value === "string" && value.trim() ? value : "Not recorded";
   }
 
+  function historyTable(caption, headers, rows) {
+    const wrap = document.createElement("div");
+    wrap.className = "history-table-wrap";
+    const table = document.createElement("table");
+    table.className = "history-table";
+    const title = document.createElement("caption");
+    title.className = "visually-hidden";
+    title.textContent = caption;
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headers.forEach((text) => {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = text;
+      headRow.append(cell);
+    });
+    head.append(headRow);
+    const body = document.createElement("tbody");
+    rows.forEach((cells) => {
+      const row = document.createElement("tr");
+      cells.forEach((text) => {
+        const cell = document.createElement("td");
+        cell.textContent = text;
+        row.append(cell);
+      });
+      body.append(row);
+    });
+    table.append(title, head, body);
+    wrap.append(table);
+    return wrap;
+  }
+
   function api(path, options) {
     return fetch(endpoint + path, Object.assign({ credentials: "include", headers: { Accept: "application/json" } }, options));
   }
@@ -377,15 +409,14 @@
     const historyHeading = document.createElement("h2");
     historyHeading.textContent = "Status history";
     host.append(historyHeading);
-    const history = document.createElement("ol");
-    history.className = "owner-history";
-    order.status_events.forEach((event) => {
-      const item = document.createElement("li");
-      const from = event.from_status ? label(event.from_status) + " to " : "";
-      item.textContent = when(event.created_at) + " — " + label(event.field_name) + ": " + from + label(event.to_status) + " (" + textOrMissing(event.actor) + ")";
-      history.append(item);
-    });
-    host.append(history);
+    const rows = (order.status_events || []).map((event) => [
+      when(event.created_at),
+      label(event.field_name),
+      event.from_status ? label(event.from_status) : "—",
+      label(event.to_status),
+      textOrMissing(event.actor),
+    ]);
+    host.append(historyTable("Status history", ["When", "What", "From", "To", "Who"], rows));
   }
 
   function loadOrder() {

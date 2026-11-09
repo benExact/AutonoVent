@@ -135,7 +135,7 @@ The session cookie is `Secure` only when `APP_ENV=production`. Local HTTP develo
 
 The static page and the API must use the same host, normally `127.0.0.1`, because the site is `http://127.0.0.1:8765` and the API is `http://127.0.0.1:8001`. CORS allows those origins and sends cookies. Open `http://127.0.0.1:8765/owner/login.html`.
 
-Create the first owner from `backend`, with the virtual environment active. The command prompts for the email and password and does not accept them as arguments. It refuses to run when an owner already exists, and it refuses a database that is not on this machine.
+Create an owner from `backend`, with the virtual environment active. The command prompts for the email and password and does not accept them as arguments. Run it again with a different email to add another owner. It refuses an email that is already in use, and it refuses a database that is not on this machine.
 
 ```powershell
 .\.venv\Scripts\python.exe -m app.admin.bootstrap

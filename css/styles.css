@@ -1871,6 +1871,38 @@ body.photo-lightbox-open {
   padding-left: 1.15rem;
 }
 
+.history-table-wrap {
+  margin-top: var(--space-md);
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  min-width: 36rem;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.history-table th {
+  color: var(--color-sand);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-table tbody tr:nth-child(even) {
+  background: rgba(31, 45, 31, 0.55);
+}
+
 .owner-portal .field select {
   width: 100%;
   min-height: 2.75rem;
@@ -2574,7 +2606,35 @@ body.photo-lightbox-open {
 
 .product-detail {
   display: grid;
-  gap: var(--space-lg);
+  gap: var(--space-2xl);
+  align-items: start;
+}
+
+.product-detail__info {
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
+}
+
+.product-detail__info .button-row {
+  margin-top: var(--space-sm);
+}
+
+.product-copy,
+.product-specs {
+  max-width: 44rem;
+  margin-top: clamp(2.75rem, 5vw, 4.25rem);
+  padding-top: var(--space-xl);
+  border-top: 1px solid var(--color-border);
+}
+
+.product-copy h2,
+.product-specs h2 {
+  margin-bottom: var(--space-lg);
+}
+
+.product-copy p {
+  line-height: 1.75;
 }
 
 .product-detail__main {
@@ -3133,6 +3193,7 @@ body.photo-lightbox-open {
 @media (min-width: 64rem) {
   .product-detail {
     grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+    gap: clamp(2.75rem, 4vw, 4.5rem);
     align-items: start;
   }
 }

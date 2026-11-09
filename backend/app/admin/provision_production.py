@@ -1,4 +1,4 @@
-"""Create the first production owner. Run inside the API container: python -m app.admin.provision_production"""
+"""Create a production owner. Run inside the API container: python -m app.admin.provision_production"""
 
 import sys
 from getpass import getpass
@@ -32,8 +32,8 @@ def main(read_email=input, read_password=getpass) -> int:
         with Session(get_engine(), expire_on_commit=False) as session:
             try:
                 create_initial_owner(session, email, password)
-            except OwnerExistsError:
-                print("An owner account already exists.", file=sys.stderr)
+            except OwnerExistsError as exc:
+                print(str(exc), file=sys.stderr)
                 return 1
             except OwnerProvisioningError as exc:
                 print(str(exc), file=sys.stderr)

@@ -1,1 +1,1 @@
-"""One-off local owner provisioning."""
+"""Local and production owner provisioning."""
