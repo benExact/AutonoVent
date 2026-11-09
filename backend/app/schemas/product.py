@@ -39,6 +39,7 @@ class PublicProduct(BaseModel):
     image_url: str | None = None
     images: list[PublicImage] = []
     specifications: list[PublicSpecification] = []
+    specification_enabled: bool = False
     specification_sheet: PublicSpecificationSheet | None = None
 
 

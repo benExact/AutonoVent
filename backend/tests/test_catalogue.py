@@ -25,6 +25,7 @@ PUBLIC_FIELDS = {
     "in_stock",
     "images",
     "specifications",
+    "specification_enabled",
     "specification_sheet",
 }
 
@@ -89,6 +90,7 @@ def test_catalogue_returns_only_priced_active_products(monkeypatch, isolated_dat
     assert product["active"] is True
     assert product["price_is_demo"] is False
     assert product["image_url"] is None
+    assert product["specification_enabled"] is False
     assert product["specification_sheet"] is None
 
     engine = create_engine(isolated_database_url)

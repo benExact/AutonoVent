@@ -188,7 +188,8 @@
     }
 
     const sheet = product.specification_sheet;
-    if (sheet && typeof sheet.filename === "string" && sheet.filename) {
+    const filename = sheet && typeof sheet.filename === "string" ? sheet.filename : "";
+    if (product.specification_enabled === true && filename) {
       page.append(specificationSection(product.slug, sheet));
     }
   }
@@ -209,16 +210,6 @@
       svg.append(path);
     });
     return svg;
-  }
-
-  function sheetSize(bytes) {
-    if (!Number.isFinite(bytes) || bytes < 1) {
-      return "";
-    }
-    if (bytes < 1024 * 1024) {
-      return Math.max(1, Math.round(bytes / 1024)) + " KB";
-    }
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
   function specificationSection(slug, sheet) {
@@ -259,7 +250,7 @@
     link.append(badge, label, arrow);
     const meta = document.createElement("p");
     meta.className = "spec-sheet__meta";
-    meta.textContent = ["PDF Document", sheetSize(sheet.size_bytes)].filter(Boolean).join(" · ");
+    meta.textContent = "PDF Document · Download";
     const status = document.createElement("p");
     status.className = "spec-sheet__status";
     status.setAttribute("role", "status");
@@ -276,7 +267,7 @@
       }
       link.setAttribute("aria-busy", "true");
       status.textContent = "Preparing your download…";
-      fetch(url, { headers: { Accept: "application/pdf" } })
+      fetch(url, { cache: "no-store", headers: { Accept: "application/pdf" } })
         .then((response) => {
           if (response.status === 404) {
             throw new Error("missing");
@@ -318,7 +309,7 @@
     return;
   }
   setStatus("Loading product.");
-  fetch(endpoint + "/api/v1/products/" + encodeURIComponent(slug), { headers: { Accept: "application/json" } })
+  fetch(endpoint + "/api/v1/products/" + encodeURIComponent(slug), { cache: "no-store", headers: { Accept: "application/json" } })
     .then((response) => {
       if (response.status === 404) {
         setStatus("This product is not available.");

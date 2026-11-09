@@ -300,7 +300,9 @@ test("product pages offer the specification sheet as a real download", () => {
   assert.match(script, /Need more product details\?/);
   assert.match(script, /"Download Specification Sheet"/);
   assert.match(script, /"\/specification"/);
-  assert.match(script, /"PDF Document"[\s\S]*join\(" · "\)/);
+  assert.match(script, /specification_enabled === true/);
+  assert.match(script, /PDF Document · Download/);
+  assert.match(script, /cache: "no-store"/);
   assert.match(script, /response\.blob\(\)/);
   assert.match(script, /The specification sheet is not available right now\./);
   assert.doesNotMatch(catalogue, /Download Specification Sheet/);
@@ -346,11 +348,12 @@ test("owner change history is rendered as a table", () => {
   const products = fs.readFileSync(path.join(__dirname, "owner-products.js"), "utf8");
   const orders = fs.readFileSync(path.join(__dirname, "owner-portal.js"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");
-  assert.match(products, /historyTable\("Change history", \["When", "Who", "Field", "From", "To"\]/);
+  const page = fs.readFileSync(path.join(__dirname, "..", "owner", "products.html"), "utf8");
+  assert.match(page, /product-audit\.js/);
+  assert.match(products, /OmniprodProductAudit\.render/);
   assert.match(orders, /historyTable\("Status history", \["When", "What", "From", "To", "Who"\]/);
-  assert.match(products, /className = "history-table"/);
   assert.match(orders, /className = "history-table"/);
-  assert.match(css, /\.history-table th/);
+  assert.match(css, /\.audit-table th/);
   assert.doesNotMatch(products, /owner-history/);
   assert.doesNotMatch(orders, /owner-history/);
 });
@@ -363,6 +366,9 @@ test("cart items show the catalogue image beside the existing controls", () => {
   assert.match(page, /product-placeholder\.svg/);
   assert.match(page, /cart-thumb/);
   assert.match(page, /Line total /);
+  assert.match(page, /cart-subtotal/);
+  assert.match(page, /textContent = "Subtotal"/);
+  assert.doesNotMatch(page, /product\.description/);
   assert.match(css, /\.cart-thumb \{[\s\S]*width: 3\.75rem;[\s\S]*height: 3\.75rem;[\s\S]*object-fit: cover;/);
   assert.match(css, /@media \(min-width: 48rem\) \{[\s\S]*\.cart-thumb \{[\s\S]*width: 4\.5rem;[\s\S]*height: 4\.5rem;/);
 });

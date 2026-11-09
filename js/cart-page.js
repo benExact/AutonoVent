@@ -16,6 +16,10 @@
   const imageFallback = "assets/images/product-placeholder.svg";
 
   function money(cents, currency) {
+    if ((currency || "ZAR") === "ZAR" && Number.isInteger(cents)) {
+      const whole = String(Math.floor(Math.abs(cents) / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (cents < 0 ? "-" : "") + "R" + whole + "." + String(Math.abs(cents) % 100).padStart(2, "0");
+    }
     try {
       return new Intl.NumberFormat("en-ZA", { style: "currency", currency: currency || "ZAR" }).format(cents / 100);
     } catch (error) {
@@ -64,41 +68,61 @@
       const product = catalogue.find((item) => item.id === line.productId);
       const row = document.createElement("li");
       row.className = "cart-line";
-      const details = document.createElement("div");
-      details.className = "cart-line__details";
       const name = document.createElement("h2");
+      name.className = "cart-line__name";
       name.textContent = product ? product.name : "This product is not available for purchase.";
-      details.append(name);
+      row.append(productThumbnail(product), name, window.AutonoventCart.lineControls(line.productId, line.quantity, render));
       if (product && Number.isInteger(product.unit_price_cents)) {
         const lineCents = product.unit_price_cents * line.quantity;
         subtotal += lineCents;
-        const price = document.createElement("p");
-        price.className = "catalogue-price";
-        price.textContent = money(product.unit_price_cents, product.currency) + (product.price_is_demo ? " each. Test price — not a confirmed selling price." : " each.");
-        details.append(price);
-        if (typeof product.description === "string" && product.description.trim()) {
-          const description = document.createElement("p");
-          description.textContent = product.description;
-          details.append(description);
+        const prices = document.createElement("div");
+        prices.className = "cart-line__prices";
+        const unit = document.createElement("p");
+        unit.className = "cart-line__unit";
+        const unitLabel = document.createElement("span");
+        unitLabel.className = "visually-hidden";
+        unitLabel.textContent = "Unit price ";
+        unit.append(unitLabel, document.createTextNode(money(product.unit_price_cents, product.currency)));
+        if (product.price_is_demo) {
+          const note = document.createElement("span");
+          note.className = "cart-line__note";
+          note.textContent = "Test price — not a confirmed selling price.";
+          unit.append(note);
         }
         const lineTotal = document.createElement("p");
         lineTotal.className = "cart-line__total";
-        lineTotal.textContent = "Line total " + money(lineCents, product.currency);
-        details.append(lineTotal);
+        const totalLabel = document.createElement("span");
+        totalLabel.className = "visually-hidden";
+        totalLabel.textContent = "Line total ";
+        lineTotal.append(totalLabel, document.createTextNode(money(lineCents, product.currency)));
+        prices.append(unit, lineTotal);
+        row.append(prices);
       } else {
         blocked = true;
         const missing = document.createElement("p");
+        missing.className = "cart-line__unavailable";
         missing.textContent = "This item cannot be purchased. Remove it to continue.";
-        details.append(missing);
+        row.append(missing);
       }
-      row.append(productThumbnail(product), details, window.AutonoventCart.lineControls(line.productId, line.quantity, render));
       list.append(row);
     });
     host.append(list);
-    const total = document.createElement("p");
-    total.className = "catalogue-price";
-    total.textContent = blocked ? "The subtotal is hidden until every item is available for purchase." : "Subtotal " + money(subtotal, "ZAR") + ". Delivery is added at checkout.";
-    host.append(total);
+    const summary = document.createElement("div");
+    summary.className = "cart-subtotal";
+    if (blocked) {
+      const note = document.createElement("p");
+      note.textContent = "The subtotal is hidden until every item is available for purchase.";
+      summary.append(note);
+    } else {
+      const label = document.createElement("p");
+      label.className = "cart-subtotal__label";
+      label.textContent = "Subtotal";
+      const amount = document.createElement("p");
+      amount.className = "cart-subtotal__amount";
+      amount.textContent = money(subtotal, "ZAR");
+      summary.append(label, amount);
+    }
+    host.append(summary);
     status.hidden = true;
     actions.hidden = blocked;
   }

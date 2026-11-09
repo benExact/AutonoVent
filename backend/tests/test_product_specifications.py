@@ -120,8 +120,10 @@ def test_owner_can_upload_replace_disable_reenable_and_remove(monkeypatch, isola
     assert preview.headers["content-disposition"].startswith("inline")
 
     assert _patch(product["id"], {"specification_enabled": True}).status_code == 200
-    public = client.get("/api/v1/products/guided-product").json()["specification_sheet"]
-    assert public == {"filename": "Guided Product Spec Sheet.pdf", "size_bytes": len(PDF), "content_type": "application/pdf"}
+    public_body = client.get("/api/v1/products/guided-product").json()
+    assert public_body["specification_enabled"] is True
+    assert public_body["specification_sheet"] == {"filename": "Guided Product Spec Sheet.pdf", "size_bytes": len(PDF), "content_type": "application/pdf"}
+    assert "specification_stored_name" not in public_body
     downloaded = client.get(_sheet_url("guided-product"))
     assert downloaded.status_code == 200
     assert downloaded.content == PDF
@@ -145,7 +147,9 @@ def test_owner_can_upload_replace_disable_reenable_and_remove(monkeypatch, isola
     assert disabled.status_code == 200
     assert disabled.json()["specification_sheet"]["configured"] is True
     assert client.get(_sheet_url("guided-product")).status_code == 404
-    assert client.get("/api/v1/products/guided-product").json()["specification_sheet"] is None
+    hidden = client.get("/api/v1/products/guided-product").json()
+    assert hidden["specification_enabled"] is False
+    assert hidden["specification_sheet"] is None
     assert [path.name for path in tmp_path.iterdir()] == after_replace
     assert _patch(product["id"], {"specification_enabled": True}).status_code == 200
     assert client.get(_sheet_url("guided-product")).content == replacement

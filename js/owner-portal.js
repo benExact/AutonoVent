@@ -294,12 +294,10 @@
 
   function renderDetail(order) {
     const host = document.querySelector("[data-order-detail]");
-    const heading = document.querySelector("[data-order-heading]");
     const status = document.querySelector("[data-order-status]");
-    if (!host || !heading || !status) {
+    if (!host || !status) {
       return;
     }
-    heading.textContent = order.is_simulation ? order.order_number + " · Simulated test order" : order.order_number;
     document.title = "Autonovent | " + order.order_number;
     setStatus(status, "");
     host.replaceChildren();
@@ -311,6 +309,7 @@
       .filter((part) => typeof part === "string" && part.trim())
       .join(", ");
     [
+      ["Order", order.is_simulation ? order.order_number + " · Simulated test order" : order.order_number],
       ["Created", when(order.created_at)],
       ["Customer", order.customer_name],
       ["Email", order.customer_email],

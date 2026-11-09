@@ -1,5 +1,6 @@
 """Read-only public catalogue. Prices come from PostgreSQL or the development test price."""
 
+import logging
 from collections.abc import Generator
 from pathlib import Path
 from urllib.parse import quote
@@ -27,6 +28,7 @@ from app.schemas.product import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def get_catalogue_session() -> Generator[Session, None, None]:
@@ -104,6 +106,7 @@ def _card_image(images: list[PublicImage], legacy: str | None) -> str | None:
 
 def _public_product(row: Product, cents: int, price_is_demo: bool, images: list[ProductImage], specs: list[ProductSpecification]) -> PublicProduct:
     public_images = _public_images(images)
+    sheet_path = _sheet_path(row, _catalogue_settings())
     return PublicProduct(
         id=row.id,
         slug=row.slug,
@@ -119,18 +122,22 @@ def _public_product(row: Product, cents: int, price_is_demo: bool, images: list[
         image_url=_card_image(public_images, row.image_filename),
         images=public_images,
         specifications=[PublicSpecification(label=item.label, value=item.value) for item in specs],
-        specification_sheet=_public_sheet(row, _catalogue_settings()),
+        specification_enabled=sheet_path is not None,
+        specification_sheet=_public_sheet(row, sheet_path),
     )
 
 
 def _sheet_path(row: Product, settings: Settings | None) -> Path | None:
     if settings is None or not row.specification_enabled:
         return None
-    return open_specification(specification_directory(settings), row.specification_stored_name)
+    path = open_specification(specification_directory(settings), row.specification_stored_name)
+    if path is None and row.specification_stored_name:
+        logger.warning("Specification sheet for product %s is enabled but the PDF is not available.", row.id)
+    return path
 
 
-def _public_sheet(row: Product, settings: Settings | None) -> PublicSpecificationSheet | None:
-    if _sheet_path(row, settings) is None:
+def _public_sheet(row: Product, path: Path | None) -> PublicSpecificationSheet | None:
+    if path is None:
         return None
     return PublicSpecificationSheet(
         filename=public_specification_name(row.specification_original_name),
@@ -198,7 +205,7 @@ def product_page(slug: str, session: Session = Depends(get_catalogue_session)) -
 
 
 @router.get("/products/{slug}", response_model=PublicProduct)
-def product_by_slug(slug: str, session: Session = Depends(get_catalogue_session)) -> PublicProduct:
+def product_by_slug(slug: str, response: Response, session: Session = Depends(get_catalogue_session)) -> PublicProduct:
     settings = _catalogue_settings()
     try:
         published = _published(_by_slug(session, slug), settings)
@@ -210,4 +217,5 @@ def product_by_slug(slug: str, session: Session = Depends(get_catalogue_session)
         raise
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail="The catalogue is temporarily unavailable.") from None
+    response.headers["Cache-Control"] = "no-store"
     return _public_product(product, cents, price_is_demo, gallery.get(product.id, []), details.get(product.id, []))
