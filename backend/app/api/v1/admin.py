@@ -1,8 +1,10 @@
 """Owner product management. These routes are not part of the public catalogue."""
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -12,13 +14,6 @@ from app.db.session import get_session
 from app.models.admin import AdminUser
 from app.models.auth import AdminSession
 from app.models.product import Product
-from app.products.downloads import (
-    DownloadRejected,
-    download_directory,
-    max_download_bytes,
-    remove_download,
-    save_download,
-)
 from app.products.gallery import (
     GalleryError,
     add_image,
@@ -30,6 +25,17 @@ from app.products.gallery import (
     replace_specifications,
 )
 from app.products.images import ImageRejected, image_directory, public_image_url, remove_product_image, save_product_image
+from app.products.specifications import (
+    PDF_TYPE,
+    SpecificationRejected,
+    max_specification_bytes,
+    open_specification,
+    original_name,
+    public_specification_name,
+    remove_specification,
+    save_specification,
+    specification_directory,
+)
 from app.products.service import (
     ProductConflict,
     ProductError,
@@ -51,10 +57,26 @@ from app.schemas.admin_product import (
     ProductList,
     ProductPatch,
     ProductWrite,
+    SpecificationSheet,
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 UNAVAILABLE = "Product management is temporarily unavailable."
+STORAGE_FAILED = "The specification sheet could not be stored on the server."
+
+
+def _sheet(product: Product) -> SpecificationSheet:
+    configured = bool(product.specification_stored_name)
+    available = configured and open_specification(specification_directory(get_settings()), product.specification_stored_name) is not None
+    return SpecificationSheet(
+        enabled=product.specification_enabled,
+        configured=configured,
+        file_available=available,
+        original_name=product.specification_original_name if configured else None,
+        size_bytes=product.specification_size_bytes if configured else None,
+        content_type=product.specification_content_type if configured else None,
+    )
 
 
 def _view(product: Product, session: Session) -> ManagedProduct:
@@ -82,11 +104,7 @@ def _view(product: Product, session: Session) -> ManagedProduct:
         image_url=images[0].url if images else public_image_url(product.image_filename),
         images=images,
         specifications=specifications,
-        download_enabled=product.download_enabled,
-        download_configured=bool(product.download_stored_name),
-        download_original_name=product.download_original_name,
-        download_button_label=product.download_button_label or "Download Product File",
-        download_size_bytes=product.download_size_bytes,
+        specification_sheet=_sheet(product),
         created_at=product.created_at,
         updated_at=product.updated_at,
     )
@@ -117,6 +135,8 @@ def add_product(
             replace_specifications(session, product, [(item.label, item.value) for item in body.specifications])
     except ProductConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ProductError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except GalleryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
@@ -191,102 +211,125 @@ async def replace_product_image(
     return _view(product, session)
 
 
-@router.post("/products/{product_id}/download", response_model=ManagedProduct)
-async def upload_product_download(
+@router.get("/products/{product_id}/specification", response_model=SpecificationSheet)
+def product_specification(
     product_id: uuid.UUID,
-    download: UploadFile = File(...),
+    _principal: tuple[AdminUser, AdminSession] = Depends(require_owner),
+    session: Session = Depends(get_session),
+) -> SpecificationSheet:
+    try:
+        product = _owned_product(session, product_id)
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    return _sheet(product)
+
+
+@router.get("/products/{product_id}/specification/file")
+def preview_product_specification(
+    product_id: uuid.UUID,
+    _principal: tuple[AdminUser, AdminSession] = Depends(require_owner),
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    try:
+        product = _owned_product(session, product_id)
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    path = open_specification(specification_directory(get_settings()), product.specification_stored_name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No specification sheet is stored for this product.")
+    return FileResponse(
+        path,
+        media_type=PDF_TYPE,
+        headers={
+            "Content-Disposition": f'inline; filename="{public_specification_name(product.specification_original_name)}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/products/{product_id}/specification", response_model=ManagedProduct)
+async def upload_product_specification(
+    product_id: uuid.UUID,
+    specification: UploadFile = File(...),
     principal: tuple[AdminUser, AdminSession] = Depends(require_csrf),
     session: Session = Depends(get_session),
 ) -> ManagedProduct:
     owner, _row = principal
     settings = get_settings()
-    limit = max_download_bytes(settings)
-    data = await download.read(limit + 1)
-    await download.close()
-    directory = download_directory(settings)
+    limit = max_specification_bytes(settings)
+    data = await specification.read(limit + 1)
+    await specification.close()
+    directory = specification_directory(settings)
     stored_name = None
     try:
         product = _owned_product(session, product_id)
-        previous = product.download_stored_name
-        stored_name, content_type, size = save_download(
-            directory,
-            data,
-            download.filename or "",
-            limit,
-            download.content_type,
-        )
-        update_product(
+        previous = product.specification_stored_name
+        stored_name, size = save_specification(directory, data, specification.filename or "", specification.content_type, limit)
+        product = update_product(
             session,
             product_id,
             {
-                "download_stored_name": stored_name,
-                "download_original_name": _safe_original_name(download.filename),
-                "download_content_type": content_type,
-                "download_size_bytes": size,
+                "specification_stored_name": stored_name,
+                "specification_original_name": original_name(specification.filename),
+                "specification_content_type": PDF_TYPE,
+                "specification_size_bytes": size,
             },
             owner.email,
         )
     except HTTPException:
-        remove_download(directory, stored_name)
         raise
-    except DownloadRejected as exc:
-        remove_download(directory, stored_name)
+    except SpecificationRejected as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except ProductNotFound as exc:
-        remove_download(directory, stored_name)
+        remove_specification(directory, stored_name)
         raise HTTPException(status_code=404, detail=str(exc)) from None
     except ProductError as exc:
-        remove_download(directory, stored_name)
+        remove_specification(directory, stored_name)
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except SQLAlchemyError:
-        remove_download(directory, stored_name)
+        remove_specification(directory, stored_name)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+    except OSError:
+        logger.exception("Specification sheet storage failed")
+        remove_specification(directory, stored_name)
+        raise HTTPException(status_code=503, detail=STORAGE_FAILED) from None
     if previous and previous != stored_name:
-        remove_download(directory, previous)
+        remove_specification(directory, previous)
     return _view(product, session)
 
 
-@router.delete("/products/{product_id}/download", response_model=ManagedProduct)
-def delete_product_download(
+@router.delete("/products/{product_id}/specification", response_model=ManagedProduct)
+def delete_product_specification(
     product_id: uuid.UUID,
     principal: tuple[AdminUser, AdminSession] = Depends(require_csrf),
     session: Session = Depends(get_session),
 ) -> ManagedProduct:
     owner, _row = principal
-    directory = download_directory(get_settings())
-    previous = None
+    directory = specification_directory(get_settings())
     try:
         product = _owned_product(session, product_id)
-        previous = product.download_stored_name
-        product = update_product(
-            session,
-            product_id,
-            {
-                "download_enabled": False,
-                "download_stored_name": None,
-                "download_original_name": None,
-                "download_content_type": None,
-                "download_size_bytes": None,
-            },
-            owner.email,
-        )
+        previous = product.specification_stored_name
+        changes: dict[str, object] = {
+            "specification_stored_name": None,
+            "specification_original_name": None,
+            "specification_content_type": None,
+            "specification_size_bytes": None,
+        }
+        if product.active:
+            changes["specification_enabled"] = False
+        product = update_product(session, product_id, changes, owner.email)
     except HTTPException:
         raise
     except ProductNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
-    remove_download(directory, previous)
+    try:
+        remove_specification(directory, previous)
+    except OSError:
+        logger.exception("Specification sheet cleanup failed")
     return _view(product, session)
-
-
-def _safe_original_name(upload_name: str | None) -> str:
-    from pathlib import Path
-
-    name = Path(upload_name or "").name.strip()
-    if not name or name in {".", ".."}:
-        return "download"
-    return name[:160]
 
 
 def _owned_product(session: Session, product_id: uuid.UUID) -> Product:

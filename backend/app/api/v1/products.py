@@ -1,6 +1,8 @@
 """Read-only public catalogue. Prices come from PostgreSQL or the development test price."""
 
 from collections.abc import Generator
+from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -13,10 +15,16 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models.product import Product
 from app.models.product import ProductImage, ProductSlugAlias, ProductSpecification
-from app.products.downloads import download_directory, open_download, public_download_name
 from app.products.gallery import images_by_product, specifications_by_product
 from app.products.images import public_image_url
-from app.schemas.product import CatalogueResponse, PublicImage, PublicProduct, PublicSpecification
+from app.products.specifications import PDF_TYPE, open_specification, public_specification_name, specification_directory
+from app.schemas.product import (
+    CatalogueResponse,
+    PublicImage,
+    PublicProduct,
+    PublicSpecification,
+    PublicSpecificationSheet,
+)
 
 router = APIRouter()
 
@@ -111,52 +119,59 @@ def _public_product(row: Product, cents: int, price_is_demo: bool, images: list[
         image_url=_card_image(public_images, row.image_filename),
         images=public_images,
         specifications=[PublicSpecification(label=item.label, value=item.value) for item in specs],
-        **_public_download(row),
+        specification_sheet=_public_sheet(row, _catalogue_settings()),
     )
 
 
-def _public_download(row: Product) -> dict[str, object]:
-    available = bool(row.download_enabled and row.download_stored_name)
-    if not available or row.download_stored_name is None:
-        return {
-            "download_enabled": False,
-            "download_label": None,
-            "download_filename": None,
-            "download_size_bytes": None,
-        }
-    return {
-        "download_enabled": True,
-        "download_label": (row.download_button_label or "Download Product File").strip() or "Download Product File",
-        "download_filename": public_download_name(row.download_original_name, row.download_stored_name),
-        "download_size_bytes": row.download_size_bytes,
-    }
+def _sheet_path(row: Product, settings: Settings | None) -> Path | None:
+    if settings is None or not row.specification_enabled:
+        return None
+    return open_specification(specification_directory(settings), row.specification_stored_name)
 
 
-@router.get("/products/{slug}/download")
-def download_product(slug: str, session: Session = Depends(get_catalogue_session)) -> FileResponse:
-    cleaned = slug.strip().lower()
+def _public_sheet(row: Product, settings: Settings | None) -> PublicSpecificationSheet | None:
+    if _sheet_path(row, settings) is None:
+        return None
+    return PublicSpecificationSheet(
+        filename=public_specification_name(row.specification_original_name),
+        size_bytes=row.specification_size_bytes,
+    )
+
+
+@router.get("/products/{slug}/specification")
+def product_specification_sheet(slug: str, session: Session = Depends(get_catalogue_session)) -> FileResponse:
     settings = _catalogue_settings()
     try:
-        row = session.scalar(select(Product).where(Product.slug == cleaned))
-        if row is None:
-            alias = session.get(ProductSlugAlias, cleaned)
-            row = session.get(Product, alias.product_id) if alias is not None else None
+        published = _published(_by_slug(session, slug), settings)
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail="The catalogue is temporarily unavailable.") from None
-    if row is None or not row.active or row.archived_at is not None or not row.download_enabled:
-        raise HTTPException(status_code=404, detail="The download is not available.")
-    directory = download_directory(settings) if settings is not None else None
-    path = open_download(directory, row.download_stored_name) if directory is not None else None
-    if path is None or row.download_stored_name is None:
-        raise HTTPException(status_code=404, detail="The download is not available.")
-    response = FileResponse(
+    path = _sheet_path(published[0], settings) if published is not None else None
+    if published is None or path is None:
+        raise HTTPException(
+            status_code=404,
+            detail="The specification sheet is not available.",
+            headers={"X-Robots-Tag": "noindex"},
+        )
+    filename = public_specification_name(published[0].specification_original_name)
+    return FileResponse(
         path,
-        media_type=row.download_content_type or "application/octet-stream",
-        filename=public_download_name(row.download_original_name, row.download_stored_name),
-        content_disposition_type="attachment",
+        media_type=PDF_TYPE,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}",
+            "Cache-Control": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+            "X-Robots-Tag": "noindex",
+        },
     )
-    response.headers["X-Robots-Tag"] = "noindex"
-    return response
+
+
+def _by_slug(session: Session, slug: str) -> Product | None:
+    cleaned = slug.strip().lower()
+    row = session.scalar(select(Product).where(Product.slug == cleaned))
+    if row is None:
+        alias = session.get(ProductSlugAlias, cleaned)
+        row = session.get(Product, alias.product_id) if alias is not None else None
+    return row
 
 
 def _published(row: Product | None, settings: Settings | None) -> tuple[Product, int, bool] | None:
@@ -172,14 +187,9 @@ def _published(row: Product | None, settings: Settings | None) -> tuple[Product,
 
 @router.get("/products/{slug}", response_model=PublicProduct)
 def product_by_slug(slug: str, session: Session = Depends(get_catalogue_session)) -> PublicProduct:
-    cleaned = slug.strip().lower()
     settings = _catalogue_settings()
     try:
-        row = session.scalar(select(Product).where(Product.slug == cleaned))
-        if row is None:
-            alias = session.get(ProductSlugAlias, cleaned)
-            row = session.get(Product, alias.product_id) if alias is not None else None
-        published = _published(row, settings)
+        published = _published(_by_slug(session, slug), settings)
         if published is None or published[0].archived_at is not None:
             raise HTTPException(status_code=404, detail="The product is not available.")
         product, cents, price_is_demo = published

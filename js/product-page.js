@@ -187,41 +187,129 @@
       page.append(section);
     }
 
-    if (product.download_enabled === true) {
-      const resources = document.createElement("section");
-      resources.className = "product-downloads";
-      const heading = document.createElement("h2");
-      heading.textContent = "Product Resources";
-      const intro = document.createElement("p");
-      intro.textContent = "Everything you need, ready to download.";
-      const link = document.createElement("a");
-      link.className = "download-button";
-      link.href = endpoint + "/api/v1/products/" + encodeURIComponent(product.slug) + "/download";
-      const label = document.createElement("span");
-      label.className = "download-button__label";
-      label.textContent = product.download_label || "Download Product File";
-      const icon = document.createElement("span");
-      icon.className = "download-button__icon";
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = "↓";
-      link.append(label, icon);
-      resources.append(heading, intro, link);
-      const meta = [];
-      if (typeof product.download_filename === "string" && product.download_filename.includes(".")) {
-        meta.push(product.download_filename.split(".").pop().toUpperCase());
-      }
-      if (typeof product.download_size_bytes === "number") {
-        const bytes = product.download_size_bytes;
-        meta.push(bytes < 1024 ? bytes + " B" : bytes < 1048576 ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1048576).toFixed(1) + " MB");
-      }
-      if (meta.length) {
-        const note = document.createElement("p");
-        note.className = "product-downloads__meta";
-        note.textContent = meta.join(" · ");
-        resources.append(note);
-      }
-      page.append(resources);
+    const sheet = product.specification_sheet;
+    if (sheet && typeof sheet.filename === "string" && sheet.filename) {
+      page.append(specificationSection(product.slug, sheet));
     }
+  }
+
+  function svgIcon(paths) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    paths.forEach((value) => {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", value);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", "1.8");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.append(path);
+    });
+    return svg;
+  }
+
+  function sheetSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 1) {
+      return "";
+    }
+    if (bytes < 1024 * 1024) {
+      return Math.max(1, Math.round(bytes / 1024)) + " KB";
+    }
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function specificationSection(slug, sheet) {
+    const url = endpoint + "/api/v1/products/" + encodeURIComponent(slug) + "/specification";
+    const section = document.createElement("section");
+    section.className = "spec-sheet";
+    section.setAttribute("aria-labelledby", "spec-sheet-heading");
+    const copy = document.createElement("div");
+    copy.className = "spec-sheet__copy";
+    const eyebrow = document.createElement("p");
+    eyebrow.className = "spec-sheet__eyebrow";
+    eyebrow.textContent = "Product documentation";
+    const heading = document.createElement("h2");
+    heading.id = "spec-sheet-heading";
+    heading.textContent = "Need more product details?";
+    const text = document.createElement("p");
+    text.textContent = "Download the official product specification sheet for technical information and specifications.";
+    copy.append(eyebrow, heading, text);
+
+    const action = document.createElement("div");
+    action.className = "spec-sheet__action";
+    const link = document.createElement("a");
+    link.className = "spec-sheet__button";
+    link.href = url;
+    link.setAttribute("download", sheet.filename);
+    const badge = document.createElement("span");
+    badge.className = "spec-sheet__badge";
+    badge.append(svgIcon(["M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5"]));
+    const badgeText = document.createElement("span");
+    badgeText.textContent = "PDF";
+    badge.append(badgeText);
+    const label = document.createElement("span");
+    label.className = "spec-sheet__label";
+    label.textContent = "Download Specification Sheet";
+    const arrow = document.createElement("span");
+    arrow.className = "spec-sheet__arrow";
+    arrow.append(svgIcon(["M12 4v11", "M7 10l5 5 5-5", "M5 20h14"]));
+    link.append(badge, label, arrow);
+    const meta = document.createElement("p");
+    meta.className = "spec-sheet__meta";
+    meta.textContent = ["PDF Document", sheetSize(sheet.size_bytes)].filter(Boolean).join(" · ");
+    const status = document.createElement("p");
+    status.className = "spec-sheet__status";
+    status.setAttribute("role", "status");
+    action.append(link, meta, status);
+    section.append(copy, action);
+
+    link.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      if (link.getAttribute("aria-busy") === "true") {
+        return;
+      }
+      link.setAttribute("aria-busy", "true");
+      status.textContent = "Preparing your download…";
+      fetch(url, { headers: { Accept: "application/pdf" } })
+        .then((response) => {
+          if (response.status === 404) {
+            throw new Error("missing");
+          }
+          if (!response.ok) {
+            throw new Error("failed");
+          }
+          return response.blob();
+        })
+        .then((blob) => {
+          const objectUrl = URL.createObjectURL(blob);
+          const save = document.createElement("a");
+          save.href = objectUrl;
+          save.download = sheet.filename;
+          document.body.append(save);
+          save.click();
+          save.remove();
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+          status.textContent = "Your download has started.";
+        })
+        .catch((error) => {
+          if (error && error.message === "missing") {
+            status.textContent = "The specification sheet is not available right now.";
+            return;
+          }
+          status.textContent = "";
+          window.location.assign(url);
+        })
+        .finally(() => {
+          link.removeAttribute("aria-busy");
+        });
+    });
+    return section;
   }
 
   const slug = requestedSlug();

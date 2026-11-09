@@ -4,6 +4,6 @@
 # services:
 #   api:
 #     environment:
-#       PRODUCT_DOWNLOAD_DIR: /var/lib/omniprod/product-downloads
+#       PRODUCT_SPECIFICATION_DIR: /var/lib/omniprod/product-specifications
 #     volumes:
-#       - /var/lib/omniprod/product-downloads:/var/lib/omniprod/product-downloads
+#       - /var/lib/omniprod/product-specifications:/var/lib/omniprod/product-specifications

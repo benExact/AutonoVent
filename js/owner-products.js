@@ -10,17 +10,61 @@
 
   const endpoint = base.replace(/\/$/, "");
   const moneyInput = window.AutonoventMoney;
+  const order = window.AutonoventGalleryOrder;
   let editingId = "";
-  let pendingImages = [];
-  let pendingDownload = null;
-  let removeDownload = false;
-  let downloadConfigured = false;
-  let downloadName = "";
-  let savedImageCount = 0;
+  let galleryItems = [];
+  let galleryProductId = "";
+  let confirmingIndex = -1;
+  let galleryBusy = false;
+  const sheet = {
+    productId: "",
+    configured: false,
+    available: false,
+    name: "",
+    size: null,
+    pending: null,
+    pendingUrl: "",
+    remove: false,
+    previewUrl: "",
+  };
   let slugEdited = false;
   let saving = false;
   let deleting = false;
   const maxImageBytes = 5 * 1024 * 1024;
+  const maxSheetBytes = 25 * 1024 * 1024;
+  const publishWarning = "Upload a PDF before publishing with the specification sheet enabled.";
+  const icons = {
+    trash: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3",
+    left: "M19 12H5M11 18l-6-6 6-6",
+  };
+
+  function icon(name) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", icons[name]);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.append(path);
+    return svg;
+  }
+
+  function fileSize(bytes) {
+    if (!Number.isFinite(bytes)) {
+      return "";
+    }
+    if (bytes < 1024 * 1024) {
+      return Math.max(1, Math.round(bytes / 1024)) + " KB";
+    }
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
 
   function setStatus(node, message) {
     if (node) {
@@ -104,51 +148,476 @@
       .slice(0, 80);
   }
 
-  function clearPreview() {
-    pendingImages.forEach((item) => URL.revokeObjectURL(item.url));
-    pendingImages = [];
+  function galleryStatus(message) {
+    setStatus(document.querySelector("[data-gallery-status]"), message);
+  }
+
+  function resetGallery(product) {
+    galleryItems.forEach((item) => {
+      if (item.kind === "pending") {
+        URL.revokeObjectURL(item.url);
+      }
+    });
+    const images = product && Array.isArray(product.images) ? product.images : [];
+    galleryItems = images.map((image) => ({
+      kind: "saved",
+      id: image.id,
+      url: imageSource({ image_url: image.thumb_url || image.url }),
+    }));
+    galleryProductId = product ? product.id : "";
+    confirmingIndex = -1;
     const input = document.querySelector("#product-image");
     if (input) {
       input.value = "";
     }
-    renderPending();
+    galleryStatus("");
+    renderGallery();
   }
 
-  function imageRoom() {
-    return Math.max(0, 4 - savedImageCount - pendingImages.length);
+  function iconButton(name, label, className) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "icon-button " + className;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.append(icon(name));
+    return button;
   }
 
-  function renderPending() {
-    const host = document.querySelector("[data-product-pending]");
+  function renderGallery() {
+    const host = document.querySelector("[data-product-gallery]");
     const count = document.querySelector("[data-product-image-count]");
+    const add = document.querySelector("[data-gallery-add]");
     if (count) {
-      const total = savedImageCount + pendingImages.length;
-      count.textContent = total + " of 4 images. The first saved image is the primary image. Use Remove on any image you do not want.";
+      count.textContent = galleryItems.length + " of " + order.maxImages + " images";
+    }
+    if (add) {
+      add.disabled = galleryBusy || order.room(galleryItems) === 0;
     }
     if (!host) {
       return;
     }
     host.replaceChildren();
-    pendingImages.forEach((item, index) => {
-      const card = document.createElement("figure");
-      card.className = "owner-gallery__item";
+    galleryItems.forEach((item, index) => {
+      const card = document.createElement("li");
+      card.className = "gallery-card";
+      const frame = document.createElement("div");
+      frame.className = "gallery-card__frame";
       const picture = document.createElement("img");
       picture.src = item.url;
-      picture.alt = "";
-      picture.width = 160;
-      picture.height = 120;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "button button--secondary";
-      remove.textContent = "Remove image";
+      picture.alt = "Product image " + (index + 1);
+      picture.width = 320;
+      picture.height = 240;
+      frame.append(picture);
+      const position = document.createElement("span");
+      position.className = "gallery-card__position";
+      position.textContent = String(index + 1);
+      position.title = index === 0 ? "Main image" : "Position " + (index + 1);
+      frame.append(position);
+      if (item.kind === "pending") {
+        const fresh = document.createElement("span");
+        fresh.className = "gallery-card__tag";
+        fresh.textContent = "Not saved";
+        frame.append(fresh);
+      }
+      const remove = iconButton("trash", "Delete image " + (index + 1), "gallery-card__delete");
+      remove.disabled = galleryBusy;
       remove.addEventListener("click", () => {
-        URL.revokeObjectURL(item.url);
-        pendingImages.splice(index, 1);
-        renderPending();
+        confirmingIndex = index;
+        renderGallery();
+        const confirm = host.querySelector("[data-gallery-confirm]");
+        if (confirm) {
+          confirm.focus();
+        }
       });
-      card.append(picture, remove);
+      frame.append(remove);
+      const earlier = iconButton("left", "Move image " + (index + 1) + " left", "gallery-card__move");
+      earlier.disabled = galleryBusy || index === 0;
+      earlier.addEventListener("click", () => moveImageLeft(index));
+      frame.append(earlier);
+      card.append(frame);
+      if (confirmingIndex === index) {
+        const prompt = document.createElement("div");
+        prompt.className = "gallery-card__confirm";
+        prompt.setAttribute("role", "group");
+        prompt.setAttribute("aria-label", "Delete image " + (index + 1) + "?");
+        const question = document.createElement("p");
+        question.textContent = "Delete this image?";
+        const yes = document.createElement("button");
+        yes.type = "button";
+        yes.className = "button button--primary button--compact";
+        yes.textContent = "Delete";
+        yes.setAttribute("data-gallery-confirm", "");
+        yes.addEventListener("click", () => deleteImageAt(index));
+        const no = document.createElement("button");
+        no.type = "button";
+        no.className = "button button--secondary button--compact";
+        no.textContent = "Keep";
+        no.addEventListener("click", () => {
+          confirmingIndex = -1;
+          renderGallery();
+        });
+        prompt.append(question, yes, no);
+        card.append(prompt);
+      }
       host.append(card);
     });
+  }
+
+  function addImages(files) {
+    const problem = files.map(chosenImage).find(Boolean);
+    if (problem) {
+      galleryStatus(problem);
+      return;
+    }
+    const room = order.room(galleryItems);
+    if (!room) {
+      galleryStatus("A product can have up to " + order.maxImages + " images. Delete one before adding another.");
+      return;
+    }
+    files.slice(0, room).forEach((file) => {
+      galleryItems.push({ kind: "pending", file: file, url: URL.createObjectURL(file) });
+    });
+    confirmingIndex = -1;
+    renderGallery();
+    galleryStatus(files.length > room ? "Only " + order.maxImages + " images can be kept. Extra images were not added." : "");
+  }
+
+  function putOrder(productId, ids) {
+    return api("/api/v1/admin/products/" + encodeURIComponent(productId) + "/images/order", {
+      method: "PUT",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrfFromCookie() },
+      body: JSON.stringify({ image_ids: ids }),
+    });
+  }
+
+  function moveImageLeft(index) {
+    const previous = galleryItems;
+    const before = order.savedIds(previous);
+    galleryItems = order.moveLeft(previous, index);
+    confirmingIndex = -1;
+    renderGallery();
+    const after = order.savedIds(galleryItems);
+    if (!galleryProductId || before.join() === after.join()) {
+      return;
+    }
+    galleryBusy = true;
+    renderGallery();
+    putOrder(galleryProductId, after).then(async (response) => {
+      if (!response.ok) {
+        galleryItems = previous;
+        galleryStatus(await detailMessage(response));
+        return;
+      }
+      galleryStatus("");
+      loadProducts();
+    }).catch(() => {
+      galleryItems = previous;
+      galleryStatus("The new image order could not be saved.");
+    }).finally(() => {
+      galleryBusy = false;
+      renderGallery();
+    });
+  }
+
+  function deleteImageAt(index) {
+    const item = galleryItems[index];
+    confirmingIndex = -1;
+    if (!item) {
+      renderGallery();
+      return;
+    }
+    if (item.kind === "pending") {
+      URL.revokeObjectURL(item.url);
+      galleryItems = order.without(galleryItems, index);
+      renderGallery();
+      return;
+    }
+    galleryBusy = true;
+    renderGallery();
+    api("/api/v1/admin/products/" + encodeURIComponent(galleryProductId) + "/images/" + encodeURIComponent(item.id), {
+      method: "DELETE",
+      headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+    }).then(async (response) => {
+      if (!response.ok) {
+        galleryStatus(await detailMessage(response));
+        return;
+      }
+      galleryItems = galleryItems.filter((entry) => entry !== item);
+      galleryStatus("Image deleted.");
+      loadProducts();
+    }).catch(() => {
+      galleryStatus("The image could not be deleted.");
+    }).finally(() => {
+      galleryBusy = false;
+      renderGallery();
+    });
+  }
+
+  async function uploadGallery(saved) {
+    const known = new Set((saved.images || []).map((image) => image.id));
+    const uploaded = [];
+    for (const item of galleryItems.filter((entry) => entry.kind === "pending")) {
+      const data = new FormData();
+      data.append("image", item.file);
+      const response = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/images", {
+        method: "POST",
+        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+        body: data,
+      });
+      if (!response.ok) {
+        throw new Error("An image was not saved. " + await detailMessage(response));
+      }
+      saved = await response.json();
+      const added = (saved.images || []).find((image) => !known.has(image.id));
+      if (added) {
+        known.add(added.id);
+        uploaded.push(added.id);
+      }
+    }
+    if (!uploaded.length) {
+      return saved;
+    }
+    const wanted = order.serverOrder(galleryItems, uploaded);
+    const current = (saved.images || []).map((image) => image.id);
+    if (wanted.length !== current.length || wanted.join() === current.join()) {
+      return saved;
+    }
+    const reordered = await putOrder(saved.id, wanted);
+    if (!reordered.ok) {
+      throw new Error("The image order was not saved. " + await detailMessage(reordered));
+    }
+    return reordered.json();
+  }
+
+  function sheetMessage(message) {
+    setStatus(document.querySelector("[data-spec-sheet-message]"), message);
+  }
+
+  function releaseSheetUrls() {
+    if (sheet.pendingUrl) {
+      URL.revokeObjectURL(sheet.pendingUrl);
+    }
+    if (sheet.previewUrl) {
+      URL.revokeObjectURL(sheet.previewUrl);
+    }
+    sheet.pendingUrl = "";
+    sheet.previewUrl = "";
+  }
+
+  function hidePreview() {
+    const panel = document.querySelector("[data-spec-sheet-preview-panel]");
+    const frame = document.querySelector("[data-spec-sheet-frame]");
+    const toggle = document.querySelector("[data-spec-sheet-preview]");
+    if (panel) {
+      panel.hidden = true;
+    }
+    if (frame) {
+      frame.removeAttribute("src");
+    }
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.textContent = "Preview";
+    }
+  }
+
+  function renderSheet(product) {
+    hidePreview();
+    releaseSheetUrls();
+    const details = product && product.specification_sheet ? product.specification_sheet : {};
+    sheet.productId = product ? product.id : "";
+    sheet.configured = details.configured === true;
+    sheet.available = details.file_available === true;
+    sheet.name = details.original_name || "";
+    sheet.size = Number.isFinite(details.size_bytes) ? details.size_bytes : null;
+    sheet.pending = null;
+    sheet.remove = false;
+    const enabled = document.querySelector("[data-spec-sheet-enabled]");
+    if (enabled) {
+      enabled.checked = details.enabled === true;
+    }
+    const input = document.querySelector("[data-spec-sheet-input]");
+    if (input) {
+      input.value = "";
+    }
+    sheetMessage("");
+    syncSheet();
+  }
+
+  function sheetWillHaveFile() {
+    return Boolean(sheet.pending) || (sheet.configured && !sheet.remove);
+  }
+
+  function syncSheet() {
+    const form = document.querySelector("[data-product-form]");
+    const enabled = document.querySelector("[data-spec-sheet-enabled]");
+    const on = Boolean(enabled && enabled.checked);
+    const status = document.querySelector("[data-spec-sheet-status]");
+    const controls = document.querySelector("[data-spec-sheet-controls]");
+    const card = document.querySelector("[data-spec-sheet-file]");
+    const empty = document.querySelector("[data-spec-sheet-empty]");
+    const name = document.querySelector("[data-spec-sheet-name]");
+    const meta = document.querySelector("[data-spec-sheet-meta]");
+    const preview = document.querySelector("[data-spec-sheet-preview]");
+    const replace = document.querySelector("[data-spec-sheet-replace]");
+    const remove = document.querySelector("[data-spec-sheet-remove]");
+    const undo = document.querySelector("[data-spec-sheet-undo]");
+    if (status) {
+      status.textContent = on ? "Enabled" : "Disabled";
+      status.classList.toggle("status-pill--on", on);
+    }
+    if (controls) {
+      controls.hidden = !on;
+    }
+    const showCard = Boolean(sheet.pending) || sheet.configured;
+    if (card) {
+      card.hidden = !showCard;
+      card.classList.toggle("spec-file--removing", sheet.remove && !sheet.pending);
+    }
+    if (empty) {
+      empty.hidden = showCard;
+    }
+    if (name) {
+      name.textContent = sheet.pending ? sheet.pending.name : sheet.name;
+    }
+    if (meta) {
+      if (sheet.pending) {
+        meta.textContent = "PDF · " + fileSize(sheet.pending.size) + " · Uploads when you save";
+      } else if (sheet.remove) {
+        meta.textContent = "Will be removed when you save";
+      } else if (sheet.configured && !sheet.available) {
+        meta.textContent = "The file is missing on the server. Upload it again.";
+      } else {
+        meta.textContent = ["PDF", fileSize(sheet.size), "Uploaded"].filter(Boolean).join(" · ");
+      }
+    }
+    const removing = sheet.remove && !sheet.pending;
+    if (preview) {
+      preview.hidden = removing || (!sheet.pending && !sheet.available);
+    }
+    if (replace) {
+      replace.hidden = removing;
+    }
+    if (remove) {
+      remove.hidden = removing;
+    }
+    if (undo) {
+      undo.hidden = !removing;
+    }
+    const published = Boolean(form && form.active && form.active.checked);
+    const note = document.querySelector("[data-spec-sheet-message]");
+    if (on && published && !sheetWillHaveFile()) {
+      sheetMessage(publishWarning);
+    } else if (note && note.textContent === publishWarning) {
+      sheetMessage("");
+    }
+  }
+
+  function chosenSheet(file) {
+    if (!file) {
+      return "Choose a PDF file.";
+    }
+    if (!/\.pdf$/i.test(file.name) || (file.type && file.type !== "application/pdf")) {
+      return "Upload the specification sheet as a PDF file.";
+    }
+    if (file.size > maxSheetBytes) {
+      return "The PDF is too large. The limit is 25 MB.";
+    }
+    return "";
+  }
+
+  function selectSheet(file) {
+    const problem = chosenSheet(file);
+    if (problem) {
+      sheetMessage(problem);
+      return;
+    }
+    hidePreview();
+    releaseSheetUrls();
+    sheet.pending = file;
+    sheet.pendingUrl = URL.createObjectURL(file);
+    sheet.remove = false;
+    sheetMessage("");
+    syncSheet();
+  }
+
+  async function togglePreview() {
+    const panel = document.querySelector("[data-spec-sheet-preview-panel]");
+    const frame = document.querySelector("[data-spec-sheet-frame]");
+    const toggle = document.querySelector("[data-spec-sheet-preview]");
+    if (!panel || !frame || !toggle) {
+      return;
+    }
+    if (!panel.hidden) {
+      hidePreview();
+      return;
+    }
+    let url = sheet.pendingUrl;
+    if (!url && sheet.productId) {
+      if (!sheet.previewUrl) {
+        toggle.disabled = true;
+        try {
+          const response = await api("/api/v1/admin/products/" + encodeURIComponent(sheet.productId) + "/specification/file", {
+            headers: { Accept: "application/pdf" },
+          });
+          if (!response.ok) {
+            sheetMessage("The specification sheet could not be loaded for preview.");
+            return;
+          }
+          sheet.previewUrl = URL.createObjectURL(await response.blob());
+        } catch (error) {
+          sheetMessage("The specification sheet could not be loaded for preview.");
+          return;
+        } finally {
+          toggle.disabled = false;
+        }
+      }
+      url = sheet.previewUrl;
+    }
+    if (!url) {
+      return;
+    }
+    frame.src = url;
+    panel.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.textContent = "Hide preview";
+  }
+
+  async function applySheet(saved, enableAfterUpload) {
+    if (sheet.pending) {
+      const data = new FormData();
+      data.append("specification", sheet.pending);
+      const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/specification", {
+        method: "POST",
+        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+        body: data,
+      });
+      if (!uploaded.ok) {
+        throw new Error(await detailMessage(uploaded));
+      }
+      saved = await uploaded.json();
+    } else if (sheet.remove && sheet.configured) {
+      const removed = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/specification", {
+        method: "DELETE",
+        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
+      });
+      if (!removed.ok) {
+        throw new Error(await detailMessage(removed));
+      }
+      saved = await removed.json();
+    }
+    if (!enableAfterUpload) {
+      return saved;
+    }
+    const enabled = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id), {
+      method: "PATCH",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrfFromCookie() },
+      body: JSON.stringify({ specification_enabled: true }),
+    });
+    if (!enabled.ok) {
+      throw new Error(await detailMessage(enabled));
+    }
+    return enabled.json();
   }
 
   function specRows() {
@@ -253,7 +722,6 @@
     if (!form || !heading || !moneyInput) {
       return;
     }
-    clearPreview();
     form.reset();
     editingId = product.id;
     heading.textContent = "Edit product";
@@ -271,8 +739,8 @@
       specs.replaceChildren();
     }
     (product.specifications || []).forEach((item) => addSpecRow(item.label, item.value));
-    renderGallery(product);
-    renderDownload(product);
+    resetGallery(product);
+    renderSheet(product);
     const remove = document.querySelector("[data-product-form] [data-product-delete]");
     if (remove) {
       remove.hidden = false;
@@ -334,18 +802,13 @@
     if (specs) {
       specs.replaceChildren();
     }
-    savedImageCount = 0;
-    const gallery = document.querySelector("[data-product-gallery]");
-    if (gallery) {
-      gallery.replaceChildren();
-    }
     const remove = form.querySelector("[data-product-delete]");
     if (remove) {
       remove.hidden = true;
       remove.disabled = false;
     }
-    clearPreview();
-    renderDownload(null);
+    resetGallery(null);
+    renderSheet(null);
     setStatus(document.querySelector("[data-product-save]"), "");
     const history = document.querySelector("[data-product-audit]");
     if (history) {
@@ -453,212 +916,6 @@
     });
   }
 
-  function renderGallery(product) {
-    const host = document.querySelector("[data-product-gallery]");
-    if (!host) {
-      return;
-    }
-    host.replaceChildren();
-    const images = Array.isArray(product.images) ? product.images : [];
-    savedImageCount = images.length;
-    renderPending();
-    images.forEach((image, index) => {
-      const card = document.createElement("figure");
-      card.className = "owner-gallery__item";
-      const picture = document.createElement("img");
-      picture.src = imageSource({ image_url: image.thumb_url || image.url });
-      picture.alt = "";
-      picture.width = 160;
-      picture.height = 120;
-      const actions = document.createElement("div");
-      actions.className = "button-row";
-      if (index === 0) {
-        const primary = document.createElement("span");
-        primary.textContent = "Primary";
-        actions.append(primary);
-      }
-      if (index > 0) {
-        const earlier = document.createElement("button");
-        earlier.type = "button";
-        earlier.className = "button button--secondary";
-        earlier.textContent = "Move earlier";
-        earlier.addEventListener("click", () => moveImage(product, index, index - 1));
-        actions.append(earlier);
-      }
-      const replace = document.createElement("input");
-      replace.type = "file";
-      replace.accept = "image/jpeg,image/png,image/webp";
-      replace.setAttribute("aria-label", "Replace image");
-      replace.addEventListener("change", () => {
-        const file = replace.files && replace.files[0];
-        const problem = chosenImage(file);
-        if (problem) {
-          setStatus(document.querySelector("[data-product-save]"), problem);
-          return;
-        }
-        if (file) {
-          replaceImage(product, image.id, file);
-        }
-      });
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "button button--secondary";
-      remove.textContent = "Remove image";
-      remove.addEventListener("click", () => deleteImage(product, image.id));
-      actions.append(replace, remove);
-      card.append(picture, actions);
-      host.append(card);
-    });
-  }
-
-  function moveImage(product, from, to) {
-    const ids = product.images.map((image) => image.id);
-    const moved = ids.splice(from, 1)[0];
-    ids.splice(to, 0, moved);
-    api("/api/v1/admin/products/" + encodeURIComponent(product.id) + "/images/order", {
-      method: "PUT",
-      headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrfFromCookie() },
-      body: JSON.stringify({ image_ids: ids }),
-    }).then(async (response) => {
-      if (!response.ok) {
-        setStatus(document.querySelector("[data-product-save]"), await detailMessage(response));
-        return;
-      }
-      fillForm(await response.json());
-    });
-  }
-
-  function replaceImage(product, imageId, file) {
-    const data = new FormData();
-    data.append("image", file);
-    api("/api/v1/admin/products/" + encodeURIComponent(product.id) + "/images/" + encodeURIComponent(imageId), {
-      method: "POST",
-      headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
-      body: data,
-    }).then(async (response) => {
-      if (!response.ok) {
-        setStatus(document.querySelector("[data-product-save]"), await detailMessage(response));
-        return;
-      }
-      fillForm(await response.json());
-      loadProducts();
-    });
-  }
-
-  function deleteImage(product, imageId) {
-    api("/api/v1/admin/products/" + encodeURIComponent(product.id) + "/images/" + encodeURIComponent(imageId), {
-      method: "DELETE",
-      headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
-    }).then(async (response) => {
-      if (!response.ok) {
-        setStatus(document.querySelector("[data-product-save]"), await detailMessage(response));
-        return;
-      }
-      fillForm(await response.json());
-      loadProducts();
-    });
-  }
-
-  function renderDownload(product) {
-    pendingDownload = null;
-    removeDownload = false;
-    downloadConfigured = Boolean(product && product.download_configured);
-    downloadName = product && product.download_original_name ? product.download_original_name : "";
-    const enabled = document.querySelector("[data-download-enabled]");
-    const label = document.querySelector("#product-download-label");
-    const file = document.querySelector("#product-download-file");
-    if (file) {
-      file.value = "";
-    }
-    if (enabled) {
-      enabled.checked = Boolean(product && product.download_enabled);
-    }
-    if (label) {
-      label.value = product && product.download_button_label ? product.download_button_label : "Download Product File";
-    }
-    syncDownloadControls();
-  }
-
-  function syncDownloadControls() {
-    const enabled = document.querySelector("[data-download-enabled]");
-    const controls = document.querySelector("[data-download-controls]");
-    const state = document.querySelector("[data-download-state]");
-    const name = document.querySelector("[data-download-name]");
-    const preview = document.querySelector("[data-download-preview-button] .download-button__label");
-    const label = document.querySelector("#product-download-label");
-    if (controls && enabled) {
-      controls.hidden = !enabled.checked;
-    }
-    if (preview && label) {
-      preview.textContent = label.value.trim() || "Download Product File";
-    }
-    if (!state || !name) {
-      return;
-    }
-    if (pendingDownload) {
-      state.textContent = "A new file will be saved with this product.";
-      name.textContent = pendingDownload.name;
-      return;
-    }
-    if (removeDownload) {
-      state.textContent = "The downloadable file will be removed when you save.";
-      name.textContent = "";
-      return;
-    }
-    if (downloadConfigured) {
-      state.textContent = "A downloadable file is configured.";
-      name.textContent = downloadName;
-      return;
-    }
-    state.textContent = "No downloadable file is configured.";
-    name.textContent = "";
-  }
-
-  async function applyDownload(saved) {
-    const form = document.querySelector("[data-product-form]");
-    const enabled = Boolean(form && form.download_enabled.checked);
-    const label = form && form.download_button_label.value.trim() ? form.download_button_label.value.trim() : "Download Product File";
-    if (removeDownload && !pendingDownload) {
-      const removed = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/download", {
-        method: "DELETE",
-        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
-      });
-      if (!removed.ok) {
-        throw new Error(await detailMessage(removed));
-      }
-      saved = await removed.json();
-    }
-    if (pendingDownload) {
-      const data = new FormData();
-      data.append("download", pendingDownload);
-      const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/download", {
-        method: "POST",
-        headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
-        body: data,
-      });
-      if (!uploaded.ok) {
-        throw new Error(await detailMessage(uploaded));
-      }
-      saved = await uploaded.json();
-    }
-    const updated = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id), {
-      method: "PATCH",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfFromCookie(),
-      },
-      body: JSON.stringify({
-        download_enabled: enabled && saved.download_configured === true,
-        download_button_label: label,
-      }),
-    });
-    if (!updated.ok) {
-      throw new Error(await detailMessage(updated));
-    }
-    return updated.json();
-  }
-
   function bindProductForm() {
     const form = document.querySelector("[data-product-form]");
     const clear = document.querySelector("[data-product-clear]");
@@ -682,30 +939,13 @@
         removeProduct(editingId, form.name.value);
       });
     }
-    if (imageInput) {
+    const addImage = form.querySelector("[data-gallery-add]");
+    if (imageInput && addImage) {
+      addImage.addEventListener("click", () => imageInput.click());
       imageInput.addEventListener("change", () => {
         const chosen = [...imageInput.files];
         imageInput.value = "";
-        const problem = chosen.map(chosenImage).find(Boolean);
-        if (problem) {
-          setStatus(result, problem);
-          return;
-        }
-        const room = imageRoom();
-        if (!room) {
-          setStatus(result, "A product can have up to 4 images. Remove one before adding another.");
-          return;
-        }
-        const accepted = chosen.slice(0, room);
-        accepted.forEach((file) => {
-          pendingImages.push({ file: file, url: URL.createObjectURL(file) });
-        });
-        renderPending();
-        if (accepted.length < chosen.length) {
-          setStatus(result, "Only 4 images can be kept. Extra images were not added.");
-          return;
-        }
-        setStatus(result, "");
+        addImages(chosen);
       });
     }
     form.name.addEventListener("input", () => {
@@ -716,34 +956,47 @@
     form.slug.addEventListener("input", () => {
       slugEdited = true;
     });
-    const downloadEnabled = form.querySelector("[data-download-enabled]");
-    const downloadFile = form.querySelector("#product-download-file");
-    const downloadLabel = form.querySelector("#product-download-label");
-    const downloadRemove = form.querySelector("[data-download-remove]");
-    if (downloadEnabled) {
-      downloadEnabled.addEventListener("change", syncDownloadControls);
+    const sheetEnabled = form.querySelector("[data-spec-sheet-enabled]");
+    const sheetInput = form.querySelector("[data-spec-sheet-input]");
+    if (sheetEnabled) {
+      sheetEnabled.addEventListener("change", syncSheet);
     }
-    if (downloadLabel) {
-      downloadLabel.addEventListener("input", syncDownloadControls);
-    }
-    if (downloadFile) {
-      downloadFile.addEventListener("change", () => {
-        pendingDownload = downloadFile.files && downloadFile.files[0] ? downloadFile.files[0] : null;
-        if (pendingDownload) {
-          removeDownload = false;
+    form.active.addEventListener("change", syncSheet);
+    if (sheetInput) {
+      sheetInput.addEventListener("change", () => {
+        const file = sheetInput.files && sheetInput.files[0];
+        sheetInput.value = "";
+        if (file) {
+          selectSheet(file);
         }
-        syncDownloadControls();
+      });
+      form.querySelectorAll("[data-spec-sheet-choose], [data-spec-sheet-replace]").forEach((button) => {
+        button.addEventListener("click", () => sheetInput.click());
       });
     }
-    if (downloadRemove) {
-      downloadRemove.addEventListener("click", () => {
-        pendingDownload = null;
-        removeDownload = true;
-        if (downloadFile) {
-          downloadFile.value = "";
+    const sheetRemove = form.querySelector("[data-spec-sheet-remove]");
+    if (sheetRemove) {
+      sheetRemove.addEventListener("click", () => {
+        hidePreview();
+        if (sheet.pending) {
+          releaseSheetUrls();
+          sheet.pending = null;
+        } else {
+          sheet.remove = true;
         }
-        syncDownloadControls();
+        syncSheet();
       });
+    }
+    const sheetUndo = form.querySelector("[data-spec-sheet-undo]");
+    if (sheetUndo) {
+      sheetUndo.addEventListener("click", () => {
+        sheet.remove = false;
+        syncSheet();
+      });
+    }
+    const sheetPreview = form.querySelector("[data-spec-sheet-preview]");
+    if (sheetPreview) {
+      sheetPreview.addEventListener("click", togglePreview);
     }
     const addSpec = document.querySelector("[data-spec-add]");
     if (addSpec) {
@@ -761,22 +1014,18 @@
         setStatus(result, error.message);
         return;
       }
-      const imageProblem = pendingImages.map((item) => chosenImage(item.file)).find(Boolean);
-      if (imageProblem) {
-        setStatus(result, imageProblem);
-        return;
-      }
       const specifications = specRows();
       if (specifications.some((row) => !row.label || !row.value)) {
         setStatus(result, "Enter both a name and a value for each specification.");
         return;
       }
-      const downloadOn = form.download_enabled.checked;
-      const willHaveFile = Boolean(pendingDownload) || (downloadConfigured && !removeDownload);
-      if (downloadOn && !willHaveFile) {
-        setStatus(result, "Choose a file before enabling the download.");
+      const sheetOn = form.specification_enabled.checked;
+      const hasSheetNow = sheet.configured && !sheet.remove;
+      if (sheetOn && form.active.checked && !sheetWillHaveFile()) {
+        setStatus(result, publishWarning);
         return;
       }
+      const enableAfterUpload = sheetOn && form.active.checked && !hasSheetNow;
       const body = {
         name: form.name.value,
         slug: form.slug.value,
@@ -787,6 +1036,7 @@
         currency: "ZAR",
         active: form.active.checked,
         in_stock: form.in_stock.value !== "false",
+        specification_enabled: sheetOn && !enableAfterUpload,
         specifications: specifications,
       };
       if (!price) {
@@ -818,31 +1068,22 @@
           return;
         }
         let saved = await response.json();
-        for (const pending of pendingImages.map((item) => item.file)) {
-          const data = new FormData();
-          data.append("image", pending);
-          const uploaded = await api("/api/v1/admin/products/" + encodeURIComponent(saved.id) + "/images", {
-            method: "POST",
-            headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
-            body: data,
-          });
-          if (!uploaded.ok) {
-            setStatus(result, "The product was saved, but an image was not. " + await detailMessage(uploaded));
-            fillForm(saved);
-            loadProducts();
-            return;
-          }
-          saved = await uploaded.json();
-        }
         try {
-          saved = await applyDownload(saved);
+          saved = await uploadGallery(saved);
         } catch (error) {
-          setStatus(result, "The product was saved, but the download was not. " + error.message);
           fillForm(saved);
+          setStatus(result, "The product was saved, but not every image was. " + error.message);
           loadProducts();
           return;
         }
-        clearPreview();
+        try {
+          saved = await applySheet(saved, enableAfterUpload);
+        } catch (error) {
+          fillForm(saved);
+          setStatus(result, "The product was saved, but the specification sheet was not. " + error.message);
+          loadProducts();
+          return;
+        }
         fillForm(saved);
         setStatus(result, "Saved.");
         loadProducts();

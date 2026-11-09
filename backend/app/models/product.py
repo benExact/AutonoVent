@@ -15,8 +15,8 @@ class Product(Base):
     __table_args__ = (
         CheckConstraint("unit_price_cents IS NULL OR unit_price_cents > 0", name="ck_products_price_positive"),
         CheckConstraint(
-            "download_enabled = false OR download_stored_name IS NOT NULL",
-            name="ck_products_download_has_file",
+            "specification_enabled = false OR active = false OR specification_stored_name IS NOT NULL",
+            name="ck_products_published_specification_has_file",
         ),
     )
 
@@ -32,12 +32,11 @@ class Product(Base):
     image_filename: Mapped[str | None] = mapped_column(String(64))
     short_description: Mapped[str | None] = mapped_column(Text)
     in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    download_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    download_stored_name: Mapped[str | None] = mapped_column(String(64))
-    download_original_name: Mapped[str | None] = mapped_column(String(160))
-    download_button_label: Mapped[str | None] = mapped_column(String(80))
-    download_content_type: Mapped[str | None] = mapped_column(String(120))
-    download_size_bytes: Mapped[int | None] = mapped_column(Integer)
+    specification_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    specification_stored_name: Mapped[str | None] = mapped_column(String(64))
+    specification_original_name: Mapped[str | None] = mapped_column(String(160))
+    specification_content_type: Mapped[str | None] = mapped_column(String(120))
+    specification_size_bytes: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

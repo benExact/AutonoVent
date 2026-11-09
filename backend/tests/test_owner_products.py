@@ -274,6 +274,7 @@ def test_product_audit_records_owner_changes_and_stays_private(monkeypatch, isol
         "currency",
         "active",
         "in_stock",
+        "specification_enabled",
     }
     updated = client.patch(
         f"/api/v1/admin/products/{product_id}",

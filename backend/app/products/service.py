@@ -26,10 +26,10 @@ AUDITED_FIELDS = (
     "in_stock",
     "archived_at",
     "image_filename",
-    "download_enabled",
-    "download_original_name",
-    "download_button_label",
+    "specification_enabled",
+    "specification_original_name",
 )
+SPECIFICATION_REQUIRED = "Upload a PDF specification sheet before publishing with the download enabled."
 
 
 class ProductError(Exception):
@@ -59,7 +59,13 @@ def get_product(session: Session, product_id: uuid.UUID) -> Product | None:
     return product
 
 
+def _check_specification(active: object, enabled: object, stored_name: object) -> None:
+    if active is True and enabled is True and not stored_name:
+        raise ProductError(SPECIFICATION_REQUIRED)
+
+
 def create_product(session: Session, fields: dict[str, object], actor: str) -> Product:
+    _check_specification(fields.get("active"), fields.get("specification_enabled"), fields.get("specification_stored_name"))
     try:
         product = Product(**fields)
         session.add(product)
@@ -86,9 +92,11 @@ def update_product(
     changes = _changes(previous, fields, include_unchanged=False)
     old_slug = product.slug
     new_slug = fields.get("slug", old_slug)
-    stored_name = fields.get("download_stored_name", product.download_stored_name)
-    if fields.get("download_enabled") is True and not stored_name:
-        raise ProductError("Upload a file before enabling the download.")
+    _check_specification(
+        fields.get("active", product.active),
+        fields.get("specification_enabled", product.specification_enabled),
+        fields.get("specification_stored_name", product.specification_stored_name),
+    )
     moved = False
     if isinstance(new_slug, str) and new_slug != old_slug:
         owned_alias = session.get(ProductSlugAlias, new_slug)

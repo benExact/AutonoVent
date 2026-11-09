@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     google_places_api_key: str = ""
     product_image_dir: str = "var/product-images"
     carousel_image_dir: str = "var/carousel-images"
-    product_download_dir: str = "var/product-downloads"
-    product_download_max_bytes: int = 25 * 1024 * 1024
+    product_specification_dir: str = "var/product-specifications"
+    product_specification_max_bytes: int = 25 * 1024 * 1024
     courier_provider: str = ""
     payment_provider: str = ""
     payfast_mode: str = ""

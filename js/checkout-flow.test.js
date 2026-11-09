@@ -264,12 +264,62 @@ test("pretty product urls use one template and leave the API alone", () => {
   const nginx = fs.readFileSync(path.join(root, "deploy", "nginx", "product-slug.conf"), "utf8");
   assert.match(page, /data-product-page/);
   assert.match(script, /\/api\/v1\/products\//);
-  assert.match(script, /Product Resources/);
-  assert.match(script, /download_enabled/);
   assert.match(script, /This product is not available/);
   assert.match(nginx, /location \^~ \/api\//);
   assert.match(nginx, /try_files \/product\.html =404/);
   assert.match(nginx, /\/product\/\[a-z0-9\]/);
+  assert.match(nginx, /client_max_body_size 26m;/);
+});
+
+test("product pages offer the specification sheet as a real download", () => {
+  const script = fs.readFileSync(path.join(__dirname, "product-page.js"), "utf8");
+  const catalogue = fs.readFileSync(path.join(__dirname, "catalogue.js"), "utf8");
+  const home = fs.readFileSync(path.join(__dirname, "home-products.js"), "utf8");
+  assert.match(script, /specification_sheet/);
+  assert.match(script, /Product documentation/);
+  assert.match(script, /Need more product details\?/);
+  assert.match(script, /"Download Specification Sheet"/);
+  assert.match(script, /"\/specification"/);
+  assert.match(script, /"PDF Document"[\s\S]*join\(" · "\)/);
+  assert.match(script, /response\.blob\(\)/);
+  assert.match(script, /The specification sheet is not available right now\./);
+  assert.doesNotMatch(catalogue, /Download Specification Sheet/);
+  assert.doesNotMatch(home, /Download Specification Sheet/);
+});
+
+test("gallery ordering helpers keep at most four images in order", () => {
+  const order = require("./owner-gallery-order.js");
+  const items = [
+    { kind: "saved", id: 1 },
+    { kind: "pending", file: "b" },
+    { kind: "saved", id: 3 },
+  ];
+  assert.equal(order.maxImages, 4);
+  assert.deepEqual(order.moveLeft(items, 2).map((item) => item.id || item.file), [1, 3, "b"]);
+  assert.deepEqual(order.moveLeft(items, 0), items);
+  assert.deepEqual(order.without(items, 0).map((item) => item.id || item.file), ["b", 3]);
+  assert.equal(order.room(items), 1);
+  assert.equal(order.room(items.concat([{ kind: "saved", id: 9 }])), 0);
+  assert.deepEqual(order.savedIds(items), [1, 3]);
+  assert.deepEqual(order.serverOrder(items, [7]), [1, 7, 3]);
+});
+
+test("the owner gallery has one multi-image upload and a specification sheet section", () => {
+  const page = fs.readFileSync(path.join(__dirname, "..", "owner", "products.html"), "utf8");
+  const script = fs.readFileSync(path.join(__dirname, "owner-products.js"), "utf8");
+  const imageInputs = page.match(/<input[^>]*type="file"[^>]*accept="image[^"]*"[^>]*>/g) || [];
+  assert.equal(imageInputs.length, 1);
+  assert.match(imageInputs[0], /multiple/);
+  assert.match(page, /data-gallery-add/);
+  assert.match(page, /Product Specification Sheet/);
+  assert.match(page, /Enable specification sheet download/);
+  assert.match(page, /accept="application\/pdf,\.pdf"|accept="\.pdf,application\/pdf"/);
+  assert.match(page, /owner-gallery-order\.js/);
+  assert.doesNotMatch(script, /Replace image/);
+  assert.match(script, /"Move image " \+ \(index \+ 1\) \+ " left"/);
+  assert.match(script, /"Delete image " \+ \(index \+ 1\)/);
+  assert.match(script, /disabled = galleryBusy \|\| index === 0/);
+  assert.match(script, /\/images\/order/);
 });
 
 test("cart items show the catalogue image beside the existing controls", () => {

@@ -160,6 +160,57 @@ def test_gallery_accepts_four_images_and_rejects_the_fifth(monkeypatch, isolated
     assert all(tmp_path.resolve() in path.resolve().parents for path in stored)
 
 
+def test_gallery_move_left_and_delete_persist_and_leave_legacy_images_alone(
+    monkeypatch, isolated_database_url: str, tmp_path
+) -> None:
+    _ready(monkeypatch, isolated_database_url, tmp_path)
+    headers = {"X-CSRF-Token": _cookie("autonovent_csrf")}
+    legacy = _create(_published("legacy-fixture"))
+    legacy_id = legacy.json()["id"]
+    single = client.post(
+        f"/api/v1/admin/products/{legacy_id}/image",
+        files={"image": ("legacy.png", _picture("PNG"), "image/png")},
+        headers=headers,
+    )
+    assert single.status_code == 200
+    legacy_url = client.get("/api/v1/products/legacy-fixture").json()["image_url"]
+    assert legacy_url and legacy_url.startswith("/media/products/")
+
+    product_id = _create(_published("ordering-fixture")).json()["id"]
+    ids = []
+    for name in ("one.png", "two.png", "three.png"):
+        response = client.post(
+            f"/api/v1/admin/products/{product_id}/images",
+            files={"image": (name, _picture("PNG"), "image/png")},
+            headers=headers,
+        )
+        assert response.status_code == 201
+        ids = [item["id"] for item in response.json()["images"]]
+    assert len(ids) == 3
+
+    moved_left = [ids[0], ids[2], ids[1]]
+    ordered = client.put(f"/api/v1/admin/products/{product_id}/images/order", json={"image_ids": moved_left}, headers=headers)
+    assert ordered.status_code == 200
+    listed = {item["id"]: item for item in client.get("/api/v1/admin/products").json()["products"]}
+    assert [item["id"] for item in listed[product_id]["images"]] == moved_left
+    public = client.get("/api/v1/products/ordering-fixture").json()
+    assert public["image_url"] == public["images"][0]["thumb_url"]
+
+    partial = client.put(f"/api/v1/admin/products/{product_id}/images/order", json={"image_ids": moved_left[:2]}, headers=headers)
+    assert partial.status_code == 422
+    no_csrf = client.put(f"/api/v1/admin/products/{product_id}/images/order", json={"image_ids": moved_left})
+    assert no_csrf.status_code == 403
+
+    removed = client.delete(f"/api/v1/admin/products/{product_id}/images/{moved_left[0]}", headers=headers)
+    assert removed.status_code == 200
+    assert [item["id"] for item in removed.json()["images"]] == moved_left[1:]
+    assert [item["position"] for item in removed.json()["images"]] == [0, 1]
+
+    after = client.get("/api/v1/products/legacy-fixture").json()
+    assert after["image_url"] == legacy_url
+    assert (tmp_path / legacy_url.rsplit("/", 1)[-1]).is_file()
+
+
 def test_out_of_stock_is_rejected_by_checkout(monkeypatch, isolated_database_url: str, tmp_path) -> None:
     _ready(monkeypatch, isolated_database_url, tmp_path)
     created = _create(_published("stock-fixture"))

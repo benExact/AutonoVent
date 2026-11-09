@@ -69,11 +69,11 @@
         description.textContent = product.description.trim();
         item.append(description);
       }
-      if (product.download_enabled === true) {
-        const download = document.createElement("p");
-        download.className = "catalogue-download";
-        download.textContent = "Download available";
-        item.append(download);
+      if (product.specification_sheet) {
+        const sheet = document.createElement("p");
+        sheet.className = "catalogue-spec-sheet";
+        sheet.textContent = "Spec sheet available";
+        item.append(sheet);
       }
       const actions = document.createElement("div");
       actions.className = "button-row";
