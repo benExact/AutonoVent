@@ -208,7 +208,7 @@ def test_owner_routes_need_a_session_and_csrf(monkeypatch, isolated_database_url
     assert list(tmp_path.iterdir()) == []
 
 
-def test_unpublished_archived_and_missing_sheets_are_not_served(monkeypatch, isolated_database_url: str, tmp_path) -> None:
+def test_unpublished_deleted_and_missing_sheets_are_not_served(monkeypatch, isolated_database_url: str, tmp_path) -> None:
     _prepare(monkeypatch, isolated_database_url, tmp_path)
     product = _product("hidden-product", active=False)
     assert _upload(product["id"]).status_code == 200
@@ -232,6 +232,8 @@ def test_unpublished_archived_and_missing_sheets_are_not_served(monkeypatch, iso
     assert owner_view["file_available"] is False
 
     assert _upload(product["id"]).status_code == 200
-    archived = client.delete(f"/api/v1/admin/products/{product['id']}", headers=_headers())
-    assert archived.status_code == 204
+    deleted = client.delete(f"/api/v1/admin/products/{product['id']}", headers=_headers())
+    assert deleted.status_code == 204
     assert client.get(_sheet_url("renamed-product")).status_code == 404
+    assert client.get(_sheet_url("hidden-product")).status_code == 404
+    assert list(tmp_path.iterdir()) == []

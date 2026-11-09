@@ -79,6 +79,10 @@ def open_specification(directory: Path, stored_name: str | None) -> Path | None:
     return path
 
 
+def stored_specification_path(directory: Path, stored_name: str | None) -> Path | None:
+    return _stored_path(directory, stored_name)
+
+
 def original_name(upload_name: str | None) -> str:
     name = Path((upload_name or "").replace("\\", "/")).name
     name = "".join(character for character in name if character.isprintable()).strip()

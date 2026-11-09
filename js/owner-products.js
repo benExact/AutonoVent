@@ -30,6 +30,7 @@
   let slugEdited = false;
   let saving = false;
   let deleting = false;
+  let pendingDelete = null;
   const maxImageBytes = 5 * 1024 * 1024;
   const maxSheetBytes = 25 * 1024 * 1024;
   const publishWarning = "Upload a PDF before publishing with the specification sheet enabled.";
@@ -82,7 +83,7 @@
     return fetch(endpoint + path, Object.assign({ credentials: "include", headers: { Accept: "application/json" } }, options));
   }
 
-  function detailMessage(response) {
+  function detailMessage(response, fallback) {
     return response.json().then(
       (body) => {
         if (typeof body.detail === "string") {
@@ -91,7 +92,7 @@
         if (Array.isArray(body.detail) && body.detail[0] && typeof body.detail[0].msg === "string") {
           return body.detail[0].msg.replace(/^Value error,\s*/, "");
         }
-        return "The product could not be saved.";
+        return fallback || "The product could not be saved.";
       },
       () => "The product service could not be reached."
     );
@@ -671,6 +672,7 @@
     products.forEach((product) => {
       const card = document.createElement("article");
       card.className = "owner-product-card";
+      card.dataset.productId = product.id;
       const figure = document.createElement("figure");
       figure.className = "owner-product-thumb";
       const image = document.createElement("img");
@@ -872,23 +874,98 @@
     return "";
   }
 
+  function showNotice(message) {
+    const notice = document.querySelector("[data-products-notice]");
+    if (notice) {
+      notice.textContent = message;
+      notice.hidden = !message;
+    }
+  }
+
+  function deleteWarning(name) {
+    return (
+      "Are you sure you want to permanently delete " +
+      name +
+      "? This will permanently remove the product, its images, specifications, specification sheet and all associated files. This action cannot be undone."
+    );
+  }
+
+  function removeProductCard(productId) {
+    document.querySelectorAll("[data-products-list] .owner-product-card").forEach((card) => {
+      if (card.dataset.productId === productId) {
+        card.remove();
+      }
+    });
+  }
+
   function removeProduct(productId, productName) {
     if (!productId || deleting || saving) {
       return;
     }
     const name = typeof productName === "string" && productName.trim() ? productName.trim() : "this product";
-    const confirmed = window.confirm(
-      "Delete " + name + "? It will be removed from the shop and this product list. Past orders keep their items and prices. You cannot restore it from this list."
-    );
-    if (!confirmed) {
+    const dialog = document.querySelector("[data-product-delete-dialog]");
+    if (!dialog || typeof dialog.showModal !== "function") {
+      if (window.confirm("Permanently Delete Product?\n\n" + deleteWarning(name))) {
+        deletePermanently(productId, name, null);
+      }
+      return;
+    }
+    pendingDelete = { id: productId, name: name };
+    dialog.querySelector("[data-product-delete-message]").textContent = deleteWarning(name);
+    const error = dialog.querySelector("[data-product-delete-error]");
+    error.textContent = "";
+    error.hidden = true;
+    dialog.showModal();
+    dialog.querySelector("[data-product-delete-cancel]").focus();
+  }
+
+  function setDeleteBusy(dialog, busy) {
+    document.querySelectorAll("[data-product-delete]").forEach((button) => {
+      button.disabled = busy;
+    });
+    if (!dialog) {
+      return;
+    }
+    const confirm = dialog.querySelector("[data-product-delete-confirm]");
+    const cancel = dialog.querySelector("[data-product-delete-cancel]");
+    confirm.disabled = busy;
+    cancel.disabled = busy;
+    confirm.textContent = busy ? "Deleting…" : "Permanently Delete";
+    if (busy) {
+      confirm.setAttribute("aria-busy", "true");
+    } else {
+      confirm.removeAttribute("aria-busy");
+    }
+  }
+
+  function deletePermanently(productId, name, dialog) {
+    if (deleting) {
       return;
     }
     deleting = true;
-    document.querySelectorAll("[data-product-delete]").forEach((button) => {
-      button.disabled = true;
-    });
-    const status = document.querySelector("[data-products-status]");
-    setStatus(status, "Removing " + name + ".");
+    setDeleteBusy(dialog, true);
+    showNotice("");
+    const failed = (message) => {
+      const error = dialog && dialog.querySelector("[data-product-delete-error]");
+      if (error) {
+        error.textContent = message;
+        error.hidden = false;
+      } else {
+        setStatus(document.querySelector("[data-products-status]"), message);
+      }
+    };
+    const removed = (message) => {
+      if (dialog && dialog.open) {
+        dialog.close();
+      }
+      pendingDelete = null;
+      removeProductCard(productId);
+      if (editingId === productId) {
+        clearForm();
+      }
+      showNotice(message);
+      loadProducts();
+    };
     api("/api/v1/admin/products/" + encodeURIComponent(productId), {
       method: "DELETE",
       headers: { Accept: "application/json", "X-CSRF-Token": csrfFromCookie() },
@@ -897,22 +974,45 @@
         window.location.assign("login.html");
         return;
       }
-      if (response.status !== 204) {
-        setStatus(status, await detailMessage(response));
+      if (response.status === 404) {
+        removed(name + " no longer exists.");
         return;
       }
-      if (editingId === productId) {
-        clearForm();
+      if (response.status !== 204) {
+        failed(await detailMessage(response, "The product could not be deleted. Try again."));
+        return;
       }
-      setStatus(status, name + " was removed.");
-      loadProducts();
+      removed(name + " was permanently deleted.");
     }).catch(() => {
-      setStatus(status, "The product could not be removed.");
+      failed("The product service could not be reached. The product was not deleted.");
     }).finally(() => {
       deleting = false;
-      document.querySelectorAll("[data-product-delete]").forEach((button) => {
-        button.disabled = false;
-      });
+      setDeleteBusy(dialog, false);
+    });
+  }
+
+  function bindDeleteDialog() {
+    const dialog = document.querySelector("[data-product-delete-dialog]");
+    if (!dialog) {
+      return;
+    }
+    dialog.querySelector("[data-product-delete-cancel]").addEventListener("click", () => {
+      if (!deleting) {
+        pendingDelete = null;
+        dialog.close();
+      }
+    });
+    dialog.querySelector("[data-product-delete-confirm]").addEventListener("click", () => {
+      if (pendingDelete) {
+        deletePermanently(pendingDelete.id, pendingDelete.name, dialog);
+      }
+    });
+    dialog.addEventListener("cancel", (event) => {
+      if (deleting) {
+        event.preventDefault();
+        return;
+      }
+      pendingDelete = null;
     });
   }
 
@@ -1111,6 +1211,7 @@
         retry.addEventListener("click", loadProducts);
       }
       bindProductForm();
+      bindDeleteDialog();
       loadProducts();
     }
   }).catch(() => {

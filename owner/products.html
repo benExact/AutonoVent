@@ -33,6 +33,7 @@
           <h2 id="product-list-heading">Products</h2>
           <button class="button button--primary" type="button" data-product-add>Add Product</button>
         </div>
+        <p class="owner-notice" role="status" data-products-notice hidden></p>
         <p class="form-status" role="status" data-products-status>Loading products.</p>
         <div class="owner-product-grid" data-products-list></div>
         <button class="button button--secondary" type="button" data-products-retry hidden>Try again</button>
@@ -146,6 +147,17 @@
         <h3>Change history</h3>
         <div data-product-audit></div>
       </section>
+      <dialog class="confirm-dialog" data-product-delete-dialog aria-labelledby="product-delete-title" aria-describedby="product-delete-message">
+        <form method="dialog" class="confirm-dialog__body">
+          <h2 id="product-delete-title">Permanently Delete Product?</h2>
+          <p id="product-delete-message" data-product-delete-message></p>
+          <p class="confirm-dialog__error" role="alert" data-product-delete-error hidden></p>
+          <div class="button-row confirm-dialog__actions">
+            <button class="button button--secondary" type="button" data-product-delete-cancel>Cancel</button>
+            <button class="button button--danger" type="button" data-product-delete-confirm>Permanently Delete</button>
+          </div>
+        </form>
+      </dialog>
     </main>
     <script src="../js/config.js"></script>
     <script src="../js/money.js"></script>

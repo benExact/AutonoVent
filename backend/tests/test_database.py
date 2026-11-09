@@ -27,7 +27,7 @@ def test_isolated_database_has_migrated_tables(isolated_database_url: str) -> No
         ).scalars().all()
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
     engine.dispose()
-    assert revision == "20261109_0017"
+    assert revision == "20261109_0018"
     assert tables == [
         "admin_sessions",
         "admin_users",
@@ -35,6 +35,7 @@ def test_isolated_database_has_migrated_tables(isolated_database_url: str) -> No
         "auth_login_attempts",
         "carousel_slides",
         "email_notifications",
+        "file_cleanups",
         "order_items",
         "order_status_events",
         "orders",

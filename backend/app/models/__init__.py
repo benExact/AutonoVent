@@ -3,6 +3,7 @@
 from app.models.admin import AdminUser
 from app.models.carousel import CarouselSlide
 from app.models.email_notification import EmailNotification
+from app.models.file_cleanup import FileCleanup
 from app.models.audit import ProductAuditEvent
 from app.models.auth import AdminSession, LoginAttempt
 from app.models.order import Order, OrderItem, OrderStatusEvent
@@ -14,6 +15,7 @@ __all__ = [
     "AdminUser",
     "CarouselSlide",
     "EmailNotification",
+    "FileCleanup",
     "AdminSession",
     "LoginAttempt",
     "Order",

@@ -4,7 +4,7 @@ from collections.abc import Generator
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -183,6 +183,18 @@ def _published(row: Product | None, settings: Settings | None) -> tuple[Product,
     if demo_cents is not None:
         return row, demo_cents, True
     return None
+
+
+@router.get("/products/{slug}/page", include_in_schema=False)
+def product_page(slug: str, session: Session = Depends(get_catalogue_session)) -> Response:
+    """Nginx asks this before serving /product/{slug}, so a missing product page answers 404."""
+    try:
+        published = _published(_by_slug(session, slug), _catalogue_settings())
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="The catalogue is temporarily unavailable.") from None
+    if published is None:
+        raise HTTPException(status_code=404, detail="The product is not available.", headers={"X-Robots-Tag": "noindex"})
+    return Response(status_code=200, headers={"X-Accel-Redirect": "/_product_shell", "Cache-Control": "no-cache"})
 
 
 @router.get("/products/{slug}", response_model=PublicProduct)

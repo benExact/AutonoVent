@@ -156,11 +156,28 @@ test("product prices use rands and shop thumbnails keep their shape", () => {
   const ownerScript = fs.readFileSync(path.join(__dirname, "owner-products.js"), "utf8");
   assert.match(ownerScript, /Delete product/);
   assert.match(ownerScript, /method: "DELETE"/);
-  assert.match(ownerScript, /window\.confirm\(\s*"Delete " \+ name/);
   assert.match(css, /@media \(min-width: 48rem\) \{[\s\S]*\.owner-product-grid/);
   assert.match(owner, /Add Product/);
   assert.match(owner, /name="price_rands"/);
   assert.match(owner, />R</);
+});
+
+test("permanent product delete asks for confirmation and blocks repeat clicks", () => {
+  const script = fs.readFileSync(path.join(__dirname, "owner-products.js"), "utf8");
+  const page = fs.readFileSync(path.join(__dirname, "..", "owner", "products.html"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "css", "styles.css"), "utf8");
+  assert.match(page, /<dialog[^>]*data-product-delete-dialog/);
+  assert.match(page, /Permanently Delete Product\?/);
+  assert.match(page, /data-product-delete-cancel>Cancel</);
+  assert.match(page, /button--danger" type="button" data-product-delete-confirm>Permanently Delete</);
+  assert.match(page, /data-products-notice/);
+  assert.match(css, /\.button--danger \{/);
+  assert.match(script, /"Are you sure you want to permanently delete " \+\s*name \+\s*"\? This will permanently remove the product, its images, specifications, specification sheet and all associated files\. This action cannot be undone\."/);
+  assert.match(script, /if \(deleting\) \{\s*return;\s*\}\s*deleting = true;/);
+  assert.match(script, /confirm\.disabled = busy;/);
+  assert.match(script, /removeProductCard\(productId\);/);
+  assert.match(script, / was permanently deleted\./);
+  assert.match(script, /event\.preventDefault\(\);/);
 });
 
 test("checkout keeps a signed-in verification cookie instead of sending an empty token", () => {
@@ -267,7 +284,10 @@ test("pretty product urls use one template and leave the API alone", () => {
   assert.match(script, /This product is not available/);
   assert.match(nginx, /location \^~ \/api\//);
   assert.match(nginx, /try_files \/product\.html =404/);
-  assert.match(nginx, /\/product\/\[a-z0-9\]/);
+  assert.match(nginx, /\/product\/\(\?<product_slug>\[a-z0-9\]/);
+  assert.match(nginx, /proxy_pass http:\/\/127\.0\.0\.1:8001\/api\/v1\/products\/\$product_slug\/page;/);
+  assert.match(nginx, /error_page 404 @product_missing;/);
+  assert.match(nginx, /location = \/_product_shell \{\s*internal;/);
   assert.match(nginx, /client_max_body_size 26m;/);
 });
 

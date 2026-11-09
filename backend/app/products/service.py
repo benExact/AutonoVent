@@ -1,7 +1,6 @@
 """Owner product records. Prices are saved only when the owner supplies them."""
 
 import uuid
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -124,26 +123,6 @@ def update_product(
             relocate_slug_directory(image_root, new_slug, old_slug)
         raise ProductConflict("A product with that slug or SKU already exists.") from None
     return product
-
-
-def archive_product(session: Session, product_id: uuid.UUID, actor: str) -> None:
-    product = get_product(session, product_id)
-    if product is None:
-        raise ProductNotFound("The product does not exist.")
-    previous_active = product.active
-    archived_at = datetime.now(timezone.utc)
-    product.active = False
-    product.archived_at = archived_at
-    _record(
-        session,
-        product.id,
-        actor,
-        [
-            {"field": "active", "previous": previous_active, "new": False},
-            {"field": "archived_at", "previous": None, "new": archived_at.isoformat()},
-        ],
-    )
-    session.commit()
 
 
 def list_audit_events(session: Session, product_id: uuid.UUID) -> list[ProductAuditEvent]:

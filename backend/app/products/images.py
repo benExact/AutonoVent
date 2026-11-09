@@ -59,6 +59,30 @@ def _inside(directory: Path, relative: str) -> Path | None:
     return path
 
 
+def stored_image_path(directory: Path, relative: str | None) -> Path | None:
+    """Resolve a saved legacy or gallery image name. Anything else, or anything outside the folder, is None."""
+    if relative is None:
+        return None
+    if IMAGE_NAME.fullmatch(relative):
+        root = directory.resolve()
+        path = (directory / relative).resolve()
+        return path if path.parent == root else None
+    return _inside(directory, relative)
+
+
+def remove_empty_slug_directory(directory: Path, slug: str) -> None:
+    if not SLUG_DIR.fullmatch(slug):
+        return
+    root = directory.resolve()
+    folder = (directory / slug).resolve()
+    if folder.parent != root or not folder.is_dir():
+        return
+    try:
+        folder.rmdir()
+    except OSError:
+        return
+
+
 def save_gallery_image(directory: Path, slug: str, data: bytes) -> tuple[str, str]:
     """Store a WebP main image and thumbnail under the product slug directory."""
     if not SLUG_DIR.fullmatch(slug):

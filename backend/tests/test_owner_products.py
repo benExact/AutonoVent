@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.db.session import reset_engine
 from app.main import app
 from app.models.audit import ProductAuditEvent
+from app.models.product import Product
 from app.models.order import OrderItem, OrderStatusEvent
 from app.orders.service import DeliveryAddress, OrderDraft, OrderLine, OrderValidationError, create_order
 
@@ -51,6 +52,7 @@ def _use_database(monkeypatch, database_url: str, image_dir: str | None = None) 
         connection.execute(text("DELETE FROM orders"))
         connection.execute(text("DELETE FROM product_audit_events"))
         connection.execute(text("DELETE FROM products"))
+        connection.execute(text("DELETE FROM file_cleanups"))
     engine.dispose()
     client.cookies.clear()
 
@@ -398,7 +400,7 @@ def test_one_product_image_can_be_replaced_and_is_served_publicly(monkeypatch, i
     get_settings.cache_clear()
 
 
-def test_archiving_a_product_keeps_order_history_and_blocks_purchase(monkeypatch, isolated_database_url: str) -> None:
+def test_permanently_deleting_a_product_keeps_order_history_and_blocks_purchase(monkeypatch, isolated_database_url: str) -> None:
     _use_database(monkeypatch, isolated_database_url)
     _owner(isolated_database_url)
     _login()
@@ -448,7 +450,7 @@ def test_archiving_a_product_keeps_order_history_and_blocks_purchase(monkeypatch
     ).status_code == 404
     assert client.patch(
         f"/api/v1/admin/products/{product_id}",
-        json={"name": "Should stay archived"},
+        json={"name": "Should stay deleted"},
         headers={"X-CSRF-Token": _cookie("autonovent_csrf")},
     ).status_code == 404
     listed = client.get("/api/v1/admin/products")
@@ -457,10 +459,11 @@ def test_archiving_a_product_keeps_order_history_and_blocks_purchase(monkeypatch
     assert [item["slug"] for item in public.json()["products"]] == ["fixture-kept"]
     engine = create_engine(isolated_database_url)
     with Session(engine, expire_on_commit=False) as session:
+        assert session.get(Product, product_id) is None
         item = session.get(OrderItem, item_id)
         assert item is not None
         assert item.order_id == order_id
-        assert item.product_id == product_id
+        assert item.product_id is None
         assert item.product_name == "Archive fixture"
         assert item.sku == "ARCH-1"
         assert item.quantity == 2

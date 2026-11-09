@@ -14,6 +14,7 @@ from app.db.session import get_session
 from app.models.admin import AdminUser
 from app.models.auth import AdminSession
 from app.models.product import Product
+from app.products.deletion import delete_product_permanently, storage_roots
 from app.products.gallery import (
     GalleryError,
     add_image,
@@ -40,7 +41,6 @@ from app.products.service import (
     ProductConflict,
     ProductError,
     ProductNotFound,
-    archive_product,
     create_product,
     get_product,
     list_audit_events,
@@ -64,6 +64,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 UNAVAILABLE = "Product management is temporarily unavailable."
 STORAGE_FAILED = "The specification sheet could not be stored on the server."
+DELETE_FAILED = "The product could not be deleted. Nothing was removed. Try again."
 
 
 def _sheet(product: Product) -> SpecificationSheet:
@@ -439,11 +440,12 @@ def remove_product(
 ) -> Response:
     owner, _row = principal
     try:
-        archive_product(session, product_id, owner.email)
+        delete_product_permanently(session, product_id, storage_roots(get_settings()), owner.email)
     except ProductNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
     except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+        logger.exception("Product %s could not be deleted. The transaction was rolled back.", product_id)
+        raise HTTPException(status_code=503, detail=DELETE_FAILED) from None
     return Response(status_code=204)
 
 

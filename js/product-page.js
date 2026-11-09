@@ -322,6 +322,10 @@
     .then((response) => {
       if (response.status === 404) {
         setStatus("This product is not available.");
+        const robots = document.createElement("meta");
+        robots.name = "robots";
+        robots.content = "noindex";
+        document.head.append(robots);
         return null;
       }
       if (!response.ok) {
